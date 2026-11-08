@@ -21,7 +21,6 @@ type statusPage struct {
 	playerState, playerFPS, age   *gtk.Label
 	conn, drop, loss, retrans     *gtk.Label
 	frameErr, rtt                 *gtk.Label
-
 }
 
 func newStatusPage(a *App) *statusPage {
