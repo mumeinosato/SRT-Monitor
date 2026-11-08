@@ -42,7 +42,7 @@ type field struct {
 	// widget
 	w        gtk.Widgetter
 	entry    *gtk.Entry
-	check    *gtk.CheckButton
+	sw       *gtk.Switch
 	drop     *gtk.DropDown
 	tileBtns map[string]*gtk.CheckButton
 	parseErr bool
@@ -155,47 +155,61 @@ type settingsPage struct {
 
 func newSettingsPage(a *App) *settingsPage {
 	p := &settingsPage{app: a, tabs: buildTabs(), draft: a.ctl.Config()}
-	p.root = gtk.NewBox(gtk.OrientationVertical, 8)
-	p.root.SetMarginTop(12)
-	p.root.SetMarginBottom(12)
-	p.root.SetMarginStart(12)
-	p.root.SetMarginEnd(12)
+	p.root = gtk.NewBox(gtk.OrientationVertical, 12)
+	p.root.SetMarginTop(16)
+	p.root.SetMarginBottom(16)
+	p.root.SetMarginStart(20)
+	p.root.SetMarginEnd(20)
 
-	p.form = gtk.NewBox(gtk.OrientationVertical, 8)
+	p.form = gtk.NewBox(gtk.OrientationVertical, 12)
 	p.form.SetVExpand(true)
 
 	// プロファイル
-	prof := gtk.NewBox(gtk.OrientationHorizontal, 6)
-	prof.Append(gtk.NewLabel("プロファイル"))
+	pc := newCard("プロファイル")
+	prof := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	p.profDrop = gtk.NewDropDownFromStrings([]string{""})
 	prof.Append(p.profDrop)
-	sw := gtk.NewButtonWithLabel("切り替え")
-	sw.SetTooltipText("選んだプロファイルを適用して、ffmpegを再起動します")
-	sw.ConnectClicked(p.switchProfile)
-	prof.Append(sw)
+	swb := gtk.NewButtonWithLabel("切り替え")
+	swb.AddCSSClass("btn")
+	swb.SetTooltipText("選んだプロファイルを適用して、ffmpegを再起動します")
+	swb.ConnectClicked(p.switchProfile)
+	prof.Append(swb)
+	sp := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	sp.SetHExpand(true)
+	prof.Append(sp)
 	p.profName = gtk.NewEntry()
 	p.profName.SetPlaceholderText("保存名(例: 本番)")
 	prof.Append(p.profName)
 	save := gtk.NewButtonWithLabel("現在の設定を保存")
+	save.AddCSSClass("btn")
 	save.ConnectClicked(p.saveProfile)
 	prof.Append(save)
-	p.form.Append(prof)
+	pc.Append(prof)
+	p.form.Append(pc)
 
-	nb := gtk.NewNotebook()
-	nb.SetVExpand(true)
+	// 接続・映像・監視・表示(内側のピル型切替)
+	inner := gtk.NewStack()
+	inner.SetTransitionType(gtk.StackTransitionTypeCrossfade)
+	inner.SetVExpand(true)
 	for i := range p.tabs {
-		nb.AppendPage(p.buildTab(&p.tabs[i]), gtk.NewLabel(p.tabs[i].name))
+		inner.AddTitled(p.buildTab(&p.tabs[i]), p.tabs[i].name, p.tabs[i].name)
 	}
-	p.form.Append(nb)
+	isw := gtk.NewStackSwitcher()
+	isw.SetStack(inner)
+	isw.SetHAlign(gtk.AlignStart)
+	p.form.Append(isw)
+	p.form.Append(inner)
 	p.root.Append(p.form)
 
 	bar := gtk.NewBox(gtk.OrientationHorizontal, 12)
 	p.note = gtk.NewLabel("")
 	p.note.SetXAlign(0)
 	p.note.SetHExpand(true)
+	p.note.SetWrap(true)
 	bar.Append(p.note)
 	p.applyBtn = gtk.NewButtonWithLabel("適用して再起動")
-	p.applyBtn.AddCSSClass("suggested-action")
+	p.applyBtn.AddCSSClass("btn")
+	p.applyBtn.AddCSSClass("btn-primary")
 	p.applyBtn.ConnectClicked(p.applyRestart)
 	bar.Append(p.applyBtn)
 	p.root.Append(bar)
@@ -206,17 +220,17 @@ func newSettingsPage(a *App) *settingsPage {
 }
 
 func (p *settingsPage) buildTab(t *tab) gtk.Widgetter {
+	card := gtk.NewBox(gtk.OrientationVertical, 0)
+	card.AddCSSClass("card")
 	grid := gtk.NewGrid()
-	grid.SetRowSpacing(6)
-	grid.SetColumnSpacing(12)
-	grid.SetMarginTop(10)
-	grid.SetMarginStart(10)
-	grid.SetMarginEnd(10)
+	grid.SetRowSpacing(10)
+	grid.SetColumnSpacing(16)
 	for row, f := range t.fields {
 		f := f
 		lbl := gtk.NewLabel(f.label)
 		lbl.SetXAlign(0)
 		lbl.SetHExpand(true)
+		lbl.AddCSSClass("kv-val")
 		tag := "反映: ffmpeg再起動"
 		if f.live {
 			tag = "反映: 即時"
@@ -227,11 +241,14 @@ func (p *settingsPage) buildTab(t *tab) gtk.Widgetter {
 		f.w = w
 		grid.Attach(w, 1, row, 1, 1)
 		hint := gtk.NewLabel(map[bool]string{true: "即時", false: "再起動"}[f.live])
-		hint.AddCSSClass("dim-label")
+		hint.AddCSSClass("tag")
+		hint.AddCSSClass(map[bool]string{true: "tag-live", false: "tag-restart"}[f.live])
+		hint.SetVAlign(gtk.AlignCenter)
 		grid.Attach(hint, 2, row, 1, 1)
 	}
+	card.Append(grid)
 	sw := gtk.NewScrolledWindow()
-	sw.SetChild(grid)
+	sw.SetChild(card)
 	sw.SetVExpand(true)
 	return sw
 }
@@ -244,10 +261,11 @@ func (p *settingsPage) makeWidget(f *field) gtk.Widgetter {
 	}
 	switch f.kind {
 	case kBool:
-		f.check = gtk.NewCheckButton()
-		f.check.SetHAlign(gtk.AlignStart)
-		f.check.ConnectToggled(changed)
-		return f.check
+		f.sw = gtk.NewSwitch()
+		f.sw.SetHAlign(gtk.AlignStart)
+		f.sw.SetVAlign(gtk.AlignCenter)
+		f.sw.NotifyProperty("active", changed)
+		return f.sw
 	case kEnum:
 		f.drop = gtk.NewDropDownFromStrings(f.enum)
 		f.drop.SetHAlign(gtk.AlignStart)
@@ -292,7 +310,7 @@ func (p *settingsPage) pushToWidgets() {
 			case kString:
 				f.entry.SetText(*f.pStr(&src))
 			case kBool:
-				f.check.SetActive(*f.pBool(&src))
+				f.sw.SetActive(*f.pBool(&src))
 			case kEnum:
 				v := *f.pStr(&src)
 				for i, o := range f.enum {
@@ -336,7 +354,7 @@ func (f *field) read(c *config.Config) bool {
 	case kString:
 		*f.pStr(c) = f.entry.Text()
 	case kBool:
-		*f.pBool(c) = f.check.Active()
+		*f.pBool(c) = f.sw.Active()
 	case kEnum:
 		i := int(f.drop.Selected())
 		if i < 0 || i >= len(f.enum) {

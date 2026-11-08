@@ -33,3 +33,4 @@
 | 2026-11-08 | フレーム表示の実装 | `internal/player/shim.go`(cgo)で `gdk_memory_texture_new` と `gtk_picture_set_paintable` を直接呼ぶ | gotk4 経由で毎フレームテクスチャを作ると解放が追いつかず、30fpsで毎秒約180MBのリークになった(`docs/VERIFY.md`)。`GtkPicture` が最新の1枚だけを持ち、前のものは即座に解放される |
 | 2026-11-08 | 描画のタイミング | フレームクロック(`AddTickCallback`)で最新の1枚を取る(仕様どおり) | タイマー方式でもリークは変わらなかったので、仕様を変えない |
 | 2026-11-08 | MediaMTX の作業ディレクトリ | 設定ファイル(`mediamtx.yml`)と同じディレクトリで起動 | MediaMTX が作業ディレクトリへ自己署名の証明書(`auto.crt`/`auto.key`)を作るため。リポジトリや `$HOME` を汚さない |
+| 2026-11-08 | UIのモダン化 | libadwaita は使わず、GTK4 + CSS(暗色テーマ、カード、ピル型タブ、スイッチ)。色は `@define-color` に集める。統計タイルはプレイヤーと同じ `player.Snapshot.Tiles` を使う | gotk4 の既定の依存だけで済み(判断規則6)、オーバーレイと制御画面で値と色の規則が食い違わない |

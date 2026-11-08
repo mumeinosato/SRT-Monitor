@@ -25,23 +25,26 @@ func css(scale float64) string {
 	return fmt.Sprintf(`
 window.player { background: #000; }
 .tiles { padding: %s; }
-.tile { background: rgb(24,24,30); border-radius: %s; padding: %s %s; margin: 0 %s; min-width: %s; }
-.tile .title { font-size: %s; color: #aab0bb; }
-.tile .value { font-size: %s; font-weight: bold; color: #f1f3f5; }
-.tile-green .value { color: #3fd16b; }
-.tile-red .value { color: #ff5a5f; }
-.tile-orange .value { color: #ffa940; }
-.tile-blue .value { color: #4dabf7; }
-.tile-gray .value { color: #868e96; }
-.tile-yellow .value { color: #ffd43b; }
-.badge { background: rgba(0,0,0,0.72); border-radius: 10px; padding: 6px 18px; font-size: 28px; font-weight: bold; }
-.badge-yellow { color: #ffd43b; }
-.badge-orange { color: #ffa940; }
-.badge-gray { color: #adb5bd; }
-.badge-neutral { color: #f1f3f5; }
-.sw { background: rgba(0,0,0,0.72); border-radius: 6px; padding: 2px 8px; font-size: 14px; color: #adb5bd; margin-left: 8px; }
-.ctl-lost { margin: 12px; }
-`, px(8), px(10), px(8), px(16), px(4), px(110), px(12), px(26))
+.tile { background: rgba(14,16,21,0.88); border: 1px solid rgba(255,255,255,0.09); border-top: %s solid rgba(255,255,255,0.18);
+        border-radius: %s; padding: %s %s; margin: 0 %s; min-width: %s; box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
+.tile .title { font-size: %s; font-weight: 600; letter-spacing: 0.5px; color: rgba(255,255,255,0.62); }
+.tile .value { font-size: %s; font-weight: 700; color: #f4f6fa; font-feature-settings: "tnum"; }
+.tile-green { border-top-color: #34d399; } .tile-green .value { color: #34d399; }
+.tile-red { border-top-color: #f87171; } .tile-red .value { color: #f87171; }
+.tile-orange { border-top-color: #fb923c; } .tile-orange .value { color: #fb923c; }
+.tile-blue { border-top-color: #60a5fa; } .tile-blue .value { color: #60a5fa; }
+.tile-gray { border-top-color: rgba(255,255,255,0.18); } .tile-gray .value { color: rgba(255,255,255,0.45); }
+.tile-yellow { border-top-color: #fbbf24; } .tile-yellow .value { color: #fbbf24; }
+.badge { background: rgba(14,16,21,0.82); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px;
+         padding: 8px 24px; font-size: 26px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+.badge-yellow { color: #fbbf24; }
+.badge-orange { color: #fb923c; }
+.badge-gray { color: #b4bac6; }
+.badge-neutral { color: #f4f6fa; }
+.sw { background: rgba(14,16,21,0.82); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px;
+      padding: 3px 11px; font-size: 14px; font-weight: 700; color: #b4bac6; margin-left: 8px; }
+.ctl-lost { margin: 14px; font-size: 20px; padding: 6px 18px; }
+`, px(8), px(3), px(14), px(8), px(12), px(4), px(98), px(12), px(26))
 }
 
 type tileWidget struct {

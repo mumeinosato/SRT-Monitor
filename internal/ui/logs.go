@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
@@ -23,30 +24,32 @@ type logPage struct {
 func newLogPage(a *App) *logPage {
 	p := &logPage{app: a}
 	mk := func(title string) (*gtk.Box, *gtk.TextView) {
-		box := gtk.NewBox(gtk.OrientationVertical, 4)
-		l := gtk.NewLabel(title)
-		l.SetXAlign(0)
-		l.AddCSSClass("big")
-		l.SetMarginStart(8)
-		l.SetMarginTop(8)
-		box.Append(l)
+		card := newCard(title)
+		card.SetVExpand(true)
 		tv := gtk.NewTextView()
 		tv.SetEditable(false)
-		tv.SetMonospace(true)
+		tv.SetCursorVisible(false)
+		tv.AddCSSClass("log")
 		tv.SetWrapMode(gtk.WrapWordChar)
 		sw := gtk.NewScrolledWindow()
 		sw.SetVExpand(true)
 		sw.SetChild(tv)
-		box.Append(sw)
-		return box, tv
+		card.Append(sw)
+		return card, tv
 	}
 	top, ftv := mk("障害履歴(直近100件、新しい順)")
 	bot, ltv := mk("ログ(ffmpegのstderrを含む)")
 	p.faults, p.logs = ftv, ltv
 	p.root = gtk.NewPaned(gtk.OrientationVertical)
+	p.root.SetMarginTop(16)
+	p.root.SetMarginBottom(16)
+	p.root.SetMarginStart(20)
+	p.root.SetMarginEnd(20)
 	p.root.SetStartChild(top)
 	p.root.SetEndChild(bot)
-	p.root.SetPosition(260)
+	p.root.SetPosition(250)
+	p.root.SetShrinkStartChild(false)
+	p.root.SetShrinkEndChild(false)
 	return p
 }
 
@@ -60,16 +63,17 @@ func (p *logPage) update() {
 		}
 		var b strings.Builder
 		for _, f := range fl {
-			fmt.Fprintf(&b, "%s [%s] %s", f.Time.Format("15:04:05"), f.Target, f.Reason)
+			fmt.Fprintf(&b, "<span foreground=\"#8b93a3\">%s</span> <b>[%s]</b> <span foreground=\"#fb923c\">%s</span>",
+				f.Time.Format("15:04:05"), esc(f.Target), esc(f.Reason))
 			if len(f.Stderr) > 0 {
-				b.WriteString("\n    stderr: " + strings.Join(f.Stderr, " | "))
+				b.WriteString("\n    <span foreground=\"#8b93a3\">stderr: " + esc(strings.Join(f.Stderr, " | ")) + "</span>")
 			}
 			b.WriteString("\n")
 		}
 		if len(fl) == 0 {
-			b.WriteString("(障害はありません)\n")
+			b.WriteString("<span foreground=\"#34d399\">障害はありません</span>\n")
 		}
-		p.faults.Buffer().SetText(b.String())
+		setMarkup(p.faults, b.String())
 	}
 	// ログ
 	if p.app.logs == nil {
@@ -79,13 +83,37 @@ func (p *logPage) update() {
 		p.lastVer = v
 		var b strings.Builder
 		for _, l := range p.app.logs.Ring.Tail(500) {
-			b.WriteString(formatLogLine(l))
+			b.WriteString(colorLogLine(l))
 			b.WriteString("\n")
 		}
-		p.logs.Buffer().SetText(b.String())
+		setMarkup(p.logs, b.String())
 		it := p.logs.Buffer().EndIter()
 		p.logs.ScrollToIter(it, 0, false, 0, 0)
 	}
+}
+
+func esc(s string) string { return glib.MarkupEscapeText(s) }
+
+// setMarkup はテキストビューの中身を、Pango マークアップで置き換える。
+func setMarkup(tv *gtk.TextView, markup string) {
+	buf := tv.Buffer()
+	buf.SetText("")
+	buf.InsertMarkup(buf.EndIter(), markup)
+}
+
+// colorLogLine は整形したログ1行を、レベルに応じた色のマークアップにする。
+func colorLogLine(line string) string {
+	text := formatLogLine(line)
+	color := "#c9ced8"
+	switch {
+	case strings.Contains(text, " ERROR "):
+		color = "#f87171"
+	case strings.Contains(text, " WARN "):
+		color = "#fb923c"
+	case strings.Contains(text, " DEBUG "):
+		color = "#8b93a3"
+	}
+	return "<span foreground=\"" + color + "\">" + esc(text) + "</span>"
 }
 
 // formatLogLine は slog のJSON1行を、人が読む形にする。
