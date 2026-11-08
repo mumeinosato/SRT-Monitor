@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -72,12 +73,13 @@ type gui struct {
 	showOverlay bool // ホットキーで切り替える実行時の状態
 	hotkey      rune
 
-	dst       []byte
-	lastSeq   uint64
-	curTex    gdk.Paintabler
-	noSigTex  gdk.Paintabler
-	noSigPath string
-	showingNS bool
+	lastSeq      uint64
+	dst          []byte // 受け取りバッファ。最後に受け取ったフレームが残る(無信号表示から戻るときに使う)
+	hasFrame     bool
+	lastW, lastH int
+	noSigTex     gdk.Paintabler
+	noSigPath    string
+	showingNS    bool
 
 	applied appliedDisplay
 }
@@ -168,7 +170,7 @@ func (g *gui) build() {
 	})
 	g.win.AddController(kc)
 
-	// 描画はフレームクロックで、最新のフレームだけを取る(前回と同じなら再描画しない)
+	// 描画はGTKのフレームクロックで、最新のフレームだけを取る
 	g.pic.AddTickCallback(func(_ gtk.Widgetter, _ gdk.FrameClocker) bool {
 		g.tick()
 		return true
@@ -182,26 +184,24 @@ func (g *gui) build() {
 }
 
 // tick はメインスレッドで、フレームごとに呼ばれる。
+// 最新の1枚だけを取り、前回と同じなら何もしない。
+// 受け取りバッファ(g.dst)は使い回す。setFrame がCへコピーするので、取り出し直す必要はない。
 func (g *gui) tick() {
-	now := time.Now()
 	w, h := g.rt.Store.Size()
-	need := w * h * 3
-	if len(g.dst) != need {
-		g.dst = make([]byte, need)
-		g.lastSeq = 0
+	if need := w * h * 3; len(g.dst) != need {
+		g.dst, g.lastSeq = make([]byte, need), 0
 	}
-	seq, changed := g.rt.Store.Take(g.dst, g.lastSeq, now)
+	seq, changed := g.rt.Store.Take(g.dst, g.lastSeq, time.Now())
 	if !changed {
 		return
 	}
-	g.lastSeq = seq
 	if w2, h2 := g.rt.Store.Size(); w2 != w || h2 != h {
 		return // 取り出す間にサイズが変わった。次のフレームで取り直す
 	}
-	tex := gdk.NewMemoryTexture(w, h, gdk.MemoryR8G8B8, glib.NewBytes(g.dst), uint(w*3))
-	g.curTex = tex
+	g.lastSeq = seq
+	g.hasFrame, g.lastW, g.lastH = true, w, h
 	if !g.showingNS {
-		g.pic.SetPaintable(tex)
+		setFrame(coreglib.BaseObject(g.pic).Native(), g.dst, w, h)
 	}
 }
 
@@ -354,7 +354,9 @@ func (g *gui) applyNoSignal(s Snapshot) {
 	g.showingNS = want
 	switch {
 	case !want:
-		g.pic.SetPaintable(g.curTex)
+		if g.hasFrame {
+			setFrame(coreglib.BaseObject(g.pic).Native(), g.dst, g.lastW, g.lastH) // 最後のフレームへ戻す
+		}
 	case s.Cfg.Display.NoSignal == "image":
 		if g.noSigTex == nil || g.noSigPath != s.Cfg.Display.NoSignalImage {
 			g.noSigPath = s.Cfg.Display.NoSignalImage

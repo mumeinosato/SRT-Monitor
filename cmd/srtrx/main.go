@@ -57,6 +57,7 @@ func run() int {
 
 	slog.Info("制御を開始した", "pid", os.Getpid(), "headless", *headless)
 	if *headless {
+		go statusLoop(ctl)
 		<-sig
 		slog.Info("終了シグナルを受けた")
 		stopAll()
@@ -73,4 +74,18 @@ func run() int {
 	code := ui.Run(ctl, logs)
 	stopAll()
 	return code
+}
+
+// statusLoop は headless のとき、状態を2秒ごとに1行でログへ出す(受け入れテストでの観測用)。
+func statusLoop(ctl *controller.Controller) {
+	defer logx.Recover("srtrx.statusLoop")
+	for range time.Tick(2 * time.Second) {
+		st := ctl.Status()
+		slog.Info("status",
+			"mtx", st.MediaMTX.State, "mtx_restarts", st.MediaMTX.RestartCount,
+			"ff", st.FFmpeg.State, "ff_restarts", st.FFmpeg.RestartCount, "hw_fallback", st.HWFallback,
+			"player_ok", st.Player.Connected, "fps", fmt.Sprintf("%.1f", st.Player.FPS), "frame_age_ms", st.Player.FrameAgeMS,
+			"stats_ok", st.Stats.OK, "connected", st.Stats.Connected,
+			"drop", st.Stats.Drop, "loss", st.Stats.Loss, "retrans", st.Stats.Retrans, "frame_errors", st.Stats.FrameErrors)
+	}
 }

@@ -126,11 +126,8 @@ func (s *Store) Publish(buf []byte, now time.Time) {
 	}
 }
 
-// Take は表示すべきフレームを dst へコピーして返す。
-// 前回の seq と同じ(変化なし)なら changed=false。dst は FrameSize 以上の長さが要る。
-func (s *Store) Take(dst []byte, lastSeq uint64, now time.Time) (seq uint64, changed bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// advanceLocked は、バッファ表示モードのとき、時刻に応じて待ち行列を1枚進める。
+func (s *Store) advanceLocked(now time.Time) {
 	if s.bufN > 0 && s.primed {
 		if !now.Before(s.nextDue) && len(s.queue) > 0 {
 			f := s.queue[0]
@@ -150,6 +147,14 @@ func (s *Store) Take(dst []byte, lastSeq uint64, now time.Time) (seq uint64, cha
 			}
 		}
 	}
+}
+
+// Take は表示すべきフレームを dst へコピーして返す。
+// 前回の seq と同じ(変化なし)なら changed=false。dst は FrameSize 以上の長さが要る。
+func (s *Store) Take(dst []byte, lastSeq uint64, now time.Time) (seq uint64, changed bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.advanceLocked(now)
 	if !s.hasLast || s.seq == lastSeq {
 		return s.seq, false
 	}
