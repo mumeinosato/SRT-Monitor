@@ -22,7 +22,6 @@ type statusPage struct {
 	conn, drop, loss, retrans     *gtk.Label
 	frameErr, rtt                 *gtk.Label
 
-	mtxRow []gtk.Widgetter
 }
 
 func newStatusPage(a *App) *statusPage {
@@ -101,9 +100,6 @@ func newStatusPage(a *App) *statusPage {
 	}
 	p.root.Append(btns)
 
-	sw := gtk.NewScrolledWindow()
-	sw.SetChild(p.root)
-	// root をそのまま返すため、スクロールは付けない(内容が少ない)
 	return p
 }
 
