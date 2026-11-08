@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # gotk4(cgo)のビルドに GTK4 と gobject-introspection の開発ファイルが要る。
+      # テスト用に ffmpeg(libsrt 有効)と Xvfb も入れる。
+      - name: apt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libgirepository1.0-dev pkg-config \
+            ffmpeg xvfb xauth
+
+      - name: T1 go vet
+        run: make vet
+
+      - name: T1 go test
+        run: xvfb-run -a make test
+
+      - name: T1 make build
+        run: make build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srtrx-linux-amd64
+          path: bin/

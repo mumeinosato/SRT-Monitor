@@ -131,3 +131,11 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,macos,windows
+
+# srtrx: 同梱するMediaMTXのバイナリ(make fetch-mediamtx で取得)
+/internal/mediamtx/assets/
+/bin/
+
+# MediaMTX が作業ディレクトリへ作る自己署名の証明書(絶対にコミットしない)
+auto.crt
+auto.key
