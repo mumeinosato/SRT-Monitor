@@ -201,8 +201,11 @@ func (c *Controller) buildSupervisors() {
 			return c.player.FramesTotal > c.ffBase
 		},
 		LastAlive: func() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.lastFrame },
+		// 起動してから最初のフレームまでは、キーフレームを待つので、ウォッチドッグより長く取る
 		StartTimeout: func() time.Duration {
-			return time.Duration(c.watchdogMS()) * time.Millisecond
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			return time.Duration(c.cfg.StartTimeoutMSEffective()) * time.Millisecond
 		},
 		HangThreshold: func() time.Duration { return time.Duration(c.watchdogMS()) * time.Millisecond },
 		HangReason: func() string {

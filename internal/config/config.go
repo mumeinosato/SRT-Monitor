@@ -31,6 +31,10 @@ type Input struct {
 	ConnectTimeoutMS int    `toml:"connect_timeout_ms" json:"connect_timeout_ms"`
 	RecvBufferBytes  int    `toml:"recv_buffer_bytes" json:"recv_buffer_bytes"`
 	TLPktDrop        bool   `toml:"tlpktdrop" json:"tlpktdrop"`
+	// ffmpeg の入力解析の上限。キーフレームの途中から繋ぐと、SPS を含む次のキーフレームまで解析できない。
+	// 上限が小さいと(旧既定の32KB)、ffmpeg 8 は諦めて終了する。早く見つかれば早く返るので、大きくして遅延は増えない。
+	ProbeSizeBytes    int `toml:"probesize_bytes" json:"probesize_bytes"`
+	AnalyzeDurationMS int `toml:"analyzeduration_ms" json:"analyzeduration_ms"`
 }
 
 type Video struct {
@@ -45,6 +49,7 @@ type Video struct {
 type Supervisor struct {
 	WatchdogMinMS         int     `toml:"watchdog_min_ms" json:"watchdog_min_ms"`
 	WatchdogLatencyFactor float64 `toml:"watchdog_latency_factor" json:"watchdog_latency_factor"`
+	StartTimeoutMS        int     `toml:"start_timeout_ms" json:"start_timeout_ms"`
 	BackoffInitialMS      int     `toml:"backoff_initial_ms" json:"backoff_initial_ms"`
 	BackoffMaxMS          int     `toml:"backoff_max_ms" json:"backoff_max_ms"`
 	BackoffResetAfterMS   int     `toml:"backoff_reset_after_ms" json:"backoff_reset_after_ms"`
@@ -96,15 +101,16 @@ func Default() Config {
 	return Config{
 		Input: Input{
 			Host: "127.0.0.1", Port: 8890, Path: "nc", Mode: "caller",
-			LatencyMS: 120, TimeoutMS: 5000, ConnectTimeoutMS: 3000,
+			LatencyMS: 120, TimeoutMS: 10000, ConnectTimeoutMS: 3000,
 			RecvBufferBytes: 0, TLPktDrop: true,
+			ProbeSizeBytes: 524_288, AnalyzeDurationMS: 1000,
 		},
 		Video: Video{
 			Width: 1920, Height: 1080, FPS: 30, HWAccel: "none",
 			PlayerBufferFrames: 0, ExtraArgs: []string{},
 		},
 		Supervisor: Supervisor{
-			WatchdogMinMS: 3000, WatchdogLatencyFactor: 2.0,
+			WatchdogMinMS: 3000, WatchdogLatencyFactor: 2.0, StartTimeoutMS: 15000,
 			BackoffInitialMS: 200, BackoffMaxMS: 2000, BackoffResetAfterMS: 10000,
 			HWFallbackFailMS: 2000, HWFallbackFailCount: 3,
 		},
@@ -140,6 +146,16 @@ func (c Config) WatchdogThresholdMS() int {
 		return c.Supervisor.WatchdogMinMS
 	}
 	return v
+}
+
+// StartTimeoutMSEffective は ffmpeg の「起動してから最初のフレームまで」に許す時間。
+// 送信の途中から繋ぐと、次のキーフレームが来るまで映像が出せないので、ウォッチドッグより長く取る
+// (短いと、キーフレーム間隔の長い送信で、起動し直しを永久に繰り返す)。ウォッチドッグのしきい値より短くはしない。
+func (c Config) StartTimeoutMSEffective() int {
+	if w := c.WatchdogThresholdMS(); c.Supervisor.StartTimeoutMS < w {
+		return w
+	}
+	return c.Supervisor.StartTimeoutMS
 }
 
 // Effective は mediamtx.enabled のとき、input.host/port と metrics.url を
@@ -239,6 +255,8 @@ func (c Config) Validate() error {
 	rng("input.latency_ms", c.Input.LatencyMS, 20, 10000)
 	rng("input.timeout_ms", c.Input.TimeoutMS, 1000, 60000)
 	rng("input.connect_timeout_ms", c.Input.ConnectTimeoutMS, 500, 30000)
+	rng("input.probesize_bytes", c.Input.ProbeSizeBytes, 32768, 200_000_000)
+	rng("input.analyzeduration_ms", c.Input.AnalyzeDurationMS, 0, 120000)
 	if c.Input.RecvBufferBytes < 0 {
 		add("input.recv_buffer_bytes", "負の値は不可")
 	}
@@ -261,6 +279,7 @@ func (c Config) Validate() error {
 	}
 	rng("supervisor.watchdog_min_ms", c.Supervisor.WatchdogMinMS, 1000, 60000)
 	rngf("supervisor.watchdog_latency_factor", c.Supervisor.WatchdogLatencyFactor, 1.0, 20.0)
+	rng("supervisor.start_timeout_ms", c.Supervisor.StartTimeoutMS, 1000, 120000)
 	rng("supervisor.backoff_reset_after_ms", c.Supervisor.BackoffResetAfterMS, 1000, 600000)
 	rng("supervisor.hw_fallback_fail_ms", c.Supervisor.HWFallbackFailMS, 100, 60000)
 	rng("supervisor.hw_fallback_fail_count", c.Supervisor.HWFallbackFailCount, 1, 100)

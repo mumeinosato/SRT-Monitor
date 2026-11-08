@@ -88,6 +88,8 @@ func buildTabs() []tab {
 		ints("input.timeout_ms", "無通信タイムアウト(ms)", false, func(c *config.Config) *int { return &c.Input.TimeoutMS }),
 		ints("input.connect_timeout_ms", "接続タイムアウト(ms)", false, func(c *config.Config) *int { return &c.Input.ConnectTimeoutMS }),
 		ints("input.recv_buffer_bytes", "受信バッファのサイズ(byte, 0=libsrtの既定)", false, func(c *config.Config) *int { return &c.Input.RecvBufferBytes }),
+		ints("input.probesize_bytes", "入力解析の上限(byte。キーフレーム間隔が長い送信は大きく)", false, func(c *config.Config) *int { return &c.Input.ProbeSizeBytes }),
+		ints("input.analyzeduration_ms", "入力解析の時間の上限(ms)", false, func(c *config.Config) *int { return &c.Input.AnalyzeDurationMS }),
 		bools("input.tlpktdrop", "遅れたパケットの破棄(tlpktdrop)", false, func(c *config.Config) *bool { return &c.Input.TLPktDrop }),
 	}
 	conn[6].derived, conn[7].derived = mtxDerived, mtxDerived // input.host / port
@@ -103,6 +105,7 @@ func buildTabs() []tab {
 
 	sup := []*field{
 		ints("supervisor.watchdog_min_ms", "ウォッチドッグのしきい値の下限(ms)", true, func(c *config.Config) *int { return &c.Supervisor.WatchdogMinMS }),
+		ints("supervisor.start_timeout_ms", "ffmpeg 起動から最初のフレームまでの待ち(キーフレーム待ち, ms)", true, func(c *config.Config) *int { return &c.Supervisor.StartTimeoutMS }),
 		floats("supervisor.watchdog_latency_factor", "ウォッチドッグ: レイテンシの倍率", true, func(c *config.Config) *float64 { return &c.Supervisor.WatchdogLatencyFactor }),
 		ints("supervisor.backoff_initial_ms", "再起動の待ち時間 開始(ms)", true, func(c *config.Config) *int { return &c.Supervisor.BackoffInitialMS }),
 		ints("supervisor.backoff_max_ms", "再起動の待ち時間 上限(ms)", true, func(c *config.Config) *int { return &c.Supervisor.BackoffMaxMS }),
@@ -113,7 +116,7 @@ func buildTabs() []tab {
 		ints("metrics.interval_ms", "/metrics の取得間隔(ms)", true, func(c *config.Config) *int { return &c.Metrics.IntervalMS }),
 		ints("metrics.timeout_ms", "/metrics の取得タイムアウト(ms)", true, func(c *config.Config) *int { return &c.Metrics.TimeoutMS }),
 	}
-	sup[7].derived = mtxDerived
+	sup[8].derived = mtxDerived
 
 	disp := []*field{
 		strs("display.monitor", "表示するモニター(primary またはコネクター名)", true, func(c *config.Config) *string { return &c.Display.Monitor }),

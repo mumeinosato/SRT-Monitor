@@ -58,6 +58,13 @@ systemctl --user enable --now srtrx-player.service srtrx.service
 設定ファイルは `~/.config/srtrx/config.toml`(TOML)。プロファイルは同じ場所の `profiles/<名前>.toml`。
 壊れていれば `config.toml.bak1` → `bak2` → `bak3` の順に使い、全部だめなら既定値で起動する。
 
+## 送信側(OBS)の設定
+
+- **キーフレーム間隔は 1〜2秒にする。** 受信側は、送信の途中から繋ぐと、次のキーフレームまで映像を出せない。
+  間隔が長い(OBS の「自動」など)と、起動や再接続のたびに映像が出るまで待たされる。
+- SRT の `latency` は、想定する断の長さより長くする(受信機の `input.latency_ms` は、MediaMTX→ffmpeg の区間にしか効かない)。
+- OBS の「自動再接続」を有効にする。
+
 ## 開発用
 
 ```bash

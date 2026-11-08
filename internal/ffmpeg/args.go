@@ -83,7 +83,8 @@ func BuildArgs(o Options) []string {
 	c := o.Config
 	a := []string{
 		"-hide_banner", "-loglevel", "warning",
-		"-fflags", "nobuffer", "-flags", "low_delay", "-probesize", "32768", "-analyzeduration", "0",
+		"-fflags", "nobuffer", "-flags", "low_delay",
+		"-probesize", strconv.Itoa(c.Input.ProbeSizeBytes), "-analyzeduration", strconv.Itoa(c.Input.AnalyzeDurationMS * 1000), // µs
 	}
 	switch o.HWAccel {
 	case "vaapi":

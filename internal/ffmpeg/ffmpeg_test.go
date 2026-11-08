@@ -24,8 +24,8 @@ func opts(mutate func(*config.Config)) Options {
 func TestGoldenDefault(t *testing.T) {
 	want := []string{
 		"-hide_banner", "-loglevel", "warning",
-		"-fflags", "nobuffer", "-flags", "low_delay", "-probesize", "32768", "-analyzeduration", "0",
-		"-i", "srt://127.0.0.1:8890?streamid=read:nc&mode=caller&latency=120000&timeout=5000000&connect_timeout=3000&tlpktdrop=1",
+		"-fflags", "nobuffer", "-flags", "low_delay", "-probesize", "524288", "-analyzeduration", "1000000",
+		"-i", "srt://127.0.0.1:8890?streamid=read:nc&mode=caller&latency=120000&timeout=10000000&connect_timeout=3000&tlpktdrop=1",
 		"-vf", "scale=1920:1080,format=rgb24",
 		"-an", "-sn", "-dn", "-fps_mode", "passthrough",
 		"-f", "rawvideo", "unix:///run/user/1000/srtrx/frame.sock",
@@ -55,7 +55,7 @@ func TestGoldenListener(t *testing.T) {
 		c.Input.Port = 9000
 		c.Input.TLPktDrop = false
 	}).Config.Input)
-	want := "srt://0.0.0.0:9000?mode=listener&latency=120000&timeout=5000000&connect_timeout=3000"
+	want := "srt://0.0.0.0:9000?mode=listener&latency=120000&timeout=10000000&connect_timeout=3000"
 	if url != want {
 		t.Errorf("\n got: %s\nwant: %s", url, want)
 	}
@@ -85,9 +85,9 @@ func TestGoldenVAAPI(t *testing.T) {
 	got := BuildArgs(opts(func(c *config.Config) { c.Video.HWAccel = "vaapi"; c.Video.Width, c.Video.Height = 1280, 720 }))
 	want := []string{
 		"-hide_banner", "-loglevel", "warning",
-		"-fflags", "nobuffer", "-flags", "low_delay", "-probesize", "32768", "-analyzeduration", "0",
+		"-fflags", "nobuffer", "-flags", "low_delay", "-probesize", "524288", "-analyzeduration", "1000000",
 		"-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD128", "-hwaccel_output_format", "vaapi",
-		"-i", "srt://127.0.0.1:8890?streamid=read:nc&mode=caller&latency=120000&timeout=5000000&connect_timeout=3000&tlpktdrop=1",
+		"-i", "srt://127.0.0.1:8890?streamid=read:nc&mode=caller&latency=120000&timeout=10000000&connect_timeout=3000&tlpktdrop=1",
 		"-vf", "hwdownload,format=nv12,scale=1280:720,format=rgb24",
 		"-an", "-sn", "-dn", "-fps_mode", "passthrough",
 		"-f", "rawvideo", "unix:///run/user/1000/srtrx/frame.sock",
@@ -248,4 +248,18 @@ func TestDiagnoseRealFFmpegIfPresent(t *testing.T) {
 		t.Skipf("この環境の ffmpeg は要件を満たさない: %v", err)
 	}
 	t.Logf("ffmpeg %s srt=%v unix=%v", caps.VersionText, caps.HasSRT, caps.HasUnix)
+}
+
+func TestProbeOptionsAreConfigurableAndInMicroseconds(t *testing.T) {
+	got := strings.Join(BuildArgs(opts(func(c *config.Config) {
+		c.Input.ProbeSizeBytes, c.Input.AnalyzeDurationMS = 5_000_000, 3000
+	})), " ")
+	if !strings.Contains(got, "-probesize 5000000 -analyzeduration 3000000 ") {
+		t.Errorf("analyzeduration はミリ秒×1000(マイクロ秒): %s", got)
+	}
+	// 既定は旧既定(32KB)より大きい。キーフレームの途中から繋いでも、次のキーフレームまで解析を続けられる
+	d := config.Default().Input
+	if d.ProbeSizeBytes <= 32768 || d.AnalyzeDurationMS <= 0 {
+		t.Errorf("既定の解析の上限が小さい: %+v", d)
+	}
 }
