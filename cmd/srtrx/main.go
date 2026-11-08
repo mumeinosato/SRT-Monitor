@@ -55,6 +55,17 @@ func run() int {
 		}
 	}
 
+	// SIGUSR1 で累計をリセットする(GUIのボタン、Ctrl+R と同じ。GUI無しの運用や試験用)
+	usr1 := make(chan os.Signal, 1)
+	signal.Notify(usr1, syscall.SIGUSR1)
+	go func() {
+		defer logx.Recover("srtrx.usr1")
+		for range usr1 {
+			slog.Info("SIGUSR1: 累計をリセットする")
+			ctl.ResetCounters()
+		}
+	}()
+
 	slog.Info("制御を開始した", "pid", os.Getpid(), "headless", *headless)
 	if *headless {
 		go statusLoop(ctl)
@@ -76,10 +87,10 @@ func run() int {
 	return code
 }
 
-// statusLoop は headless のとき、状態を2秒ごとに1行でログへ出す(受け入れテストでの観測用)。
+// statusLoop は headless のとき、状態を1秒ごとに1行でログへ出す(受け入れテストでの観測用)。
 func statusLoop(ctl *controller.Controller) {
 	defer logx.Recover("srtrx.statusLoop")
-	for range time.Tick(2 * time.Second) {
+	for range time.Tick(time.Second) {
 		st := ctl.Status()
 		slog.Info("status",
 			"mtx", st.MediaMTX.State, "mtx_restarts", st.MediaMTX.RestartCount,

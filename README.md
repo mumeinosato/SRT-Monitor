@@ -1,4 +1,73 @@
-# repo-template
+# srtrx — SRT受信アプリ
+
+MediaMTX が受けた SRT 映像を、ffmpeg でデコードして展示ディスプレイへ全画面で映す Go 製の GUI アプリ。
+伝送の断も、ffmpeg やプレイヤーの落下も日常として扱い、**画面を暗転させない**。
+ロス・ドロップ・再送・RTT などの統計を、映像の上端に重ねて見せる。
+
+仕様は「SRT受信アプリ 仕様書」に従う。実装中の判断は [`docs/DECISIONS.md`](docs/DECISIONS.md)、
+実機で確かめる手順と結果は [`docs/VERIFY.md`](docs/VERIFY.md) にある。
+
+## 構成
+
+```
+MediaMTX(同梱・制御の子) ──SRT──▶ ffmpeg(制御の子) ──生フレーム(rgb24)──▶ プレイヤー(常駐)
+        ▲                                  ▲                                      │
+        └────────── 制御(srtrx): 設定GUI、監督、/metrics の取得と累計 ◀──ハートビート──┘
+```
+
+| 実行ファイル | 役割 |
+| --- | --- |
+| `srtrx`(制御) | 設定GUI、MediaMTX と ffmpeg の監督、`/metrics` の取得と累計、プレイヤーへの送信 |
+| `srtrx-player`(プレイヤー) | フレームの受信と全画面表示、オーバーレイ、状態バッジ、ハートビート |
+
+プレイヤーは独立して常駐するので、MediaMTX や ffmpeg が入れ替わっても、ウィンドウと最後のフレームが残る。
+
+## 必要なもの(Ubuntu 24.04 LTS, x86_64)
+
+```bash
+sudo apt-get install -y libgtk-4-dev libgirepository1.0-dev pkg-config ffmpeg
+```
+
+- GTK 4.10 以上、ffmpeg 6.0 以上(**libsrt が有効**なビルド。起動時に自己診断する)
+- Go 1.22 以上(依存の都合で、より新しい版が要る場合は `GOTOOLCHAIN=auto` が取得する)
+- gotk4 は **`pkg v0.3.1`** に固定している(v0.4.1 は新しい glib を前提とし、24.04 では cgo のビルドが通らない)
+
+## ビルドと配備
+
+```bash
+make build      # MediaMTX の公式バイナリを取得(SHA-256 検証)し、bin/srtrx と bin/srtrx-player を作る
+make test       # go test ./...
+make install    # ~/.local/bin とユーザーの systemd ユニットへ配置
+
+systemctl --user daemon-reload
+systemctl --user enable --now srtrx-player.service srtrx.service
+```
+
+初回の gotk4 のビルドは長い(数分〜10分)。GitHub Actions(`.github/workflows/ci.yaml`)でもビルドと検証が走る。
+
+## 使い方
+
+- 制御のウィンドウに「状態」「設定」「ログ」の3画面がある。ヘッダーに「本番ロック」と「情報」(MediaMTX のライセンス)。
+- 設定の「即時」の項目は、変えた瞬間に反映される。「再起動」の項目は **「適用して再起動」** でまとめて反映する(確認ダイアログが出る)。
+- 範囲外の値を入れた欄は赤くなり、「適用」を押せなくなる。
+- 本番ロック中は設定を変更できない。解除はロックボタンと確認ダイアログで行う。
+- 累計のリセット: 制御ウィンドウの「カウンターをリセット」ボタン、`Ctrl+R`、または制御プロセスへ `SIGUSR1`。
+- プレイヤーのホットキー(既定 `o`)で、オーバーレイ全体の表示を切り替える。
+- `srtrx -headless` は GUI 無しで動かす(監督と統計のみ。1秒ごとに状態を1行でログへ出す)。
+
+設定ファイルは `~/.config/srtrx/config.toml`(TOML)。プロファイルは同じ場所の `profiles/<名前>.toml`。
+壊れていれば `config.toml.bak1` → `bak2` → `bak3` の順に使い、全部だめなら既定値で起動する。
+
+## 開発用
+
+```bash
+go run ./tools/feed -n 90        # ffmpeg の代わりに、テストフレームをプレイヤーへ送る
+SRTRX_FFMPEG=/path/to/ffmpeg srtrx   # PATH 外の ffmpeg を使う
+```
+
+---
+
+# リポジトリ運用(テンプレート由来)
 
 NCチームで使用する開発環境のテンプレートです．
 
