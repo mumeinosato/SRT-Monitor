@@ -6,6 +6,8 @@ name: ci
 # チェック結果は同じコミットに付くので、PR の画面にはこの実行の結果が出る。
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]   # v0.1.0 のようなタグでリリースを作る
   workflow_dispatch:
 
 # 同じブランチへ続けて push したら、古い実行は止める
@@ -17,6 +19,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: write   # リリースの作成に必要(タグのときだけ使う)
     steps:
       - uses: actions/checkout@v4
 
@@ -49,3 +53,41 @@ jobs:
         with:
           name: srtrx-linux-amd64
           path: bin/
+
+      # ---- リリース(v* のタグを push したときだけ) ----
+      - name: パッケージ作成
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          name="srtrx-${GITHUB_REF_NAME}-linux-amd64"
+          mkdir -p "dist/$name"
+          cp bin/srtrx bin/srtrx-player "dist/$name/"
+          cp deploy/srtrx.service deploy/srtrx-player.service "dist/$name/"
+          cp README.md "dist/$name/"
+          cp internal/mediamtx/LICENSE "dist/$name/LICENSE-mediamtx"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+
+      - name: GitHub Release を作成
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="srtrx-${GITHUB_REF_NAME}-linux-amd64"
+          cat > notes.md <<'EOF'
+          ## 動作環境
+          - Ubuntu 24.04 LTS (x86_64) でビルド。GTK 4.10 以上(ビルドは 4.14.5)
+          - ffmpeg 6.0 以上(**libsrt 有効**のビルド)。起動時に自己診断します
+          - MediaMTX は `srtrx` に埋め込み済み(公式バイナリ、MIT。`LICENSE-mediamtx` を同梱)
+
+          ## 入れ方
+          ```bash
+          tar xzf srtrx-*-linux-amd64.tar.gz && cd srtrx-*-linux-amd64
+          install -Dm755 srtrx srtrx-player -t ~/.local/bin
+          install -Dm644 srtrx.service srtrx-player.service -t ~/.config/systemd/user
+          systemctl --user daemon-reload
+          systemctl --user enable --now srtrx-player.service srtrx.service
+          ```
+          EOF
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/$name.tar.gz" "dist/$name.tar.gz.sha256" \
+            --title "srtrx $GITHUB_REF_NAME" --notes-file notes.md --generate-notes
