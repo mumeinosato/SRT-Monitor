@@ -15,7 +15,7 @@ func TestDefaultIsValid(t *testing.T) {
 
 func TestDefaultsMatchSpec(t *testing.T) {
 	d := Default()
-	if d.Input.LatencyMS != 120 || d.Input.TimeoutMS != 5000 || d.Input.ConnectTimeoutMS != 3000 ||
+	if d.Input.LatencyMS != 120 || d.Input.TimeoutMS != 10000 || d.Input.ConnectTimeoutMS != 3000 ||
 		d.Input.Port != 8890 || d.Input.Path != "nc" || d.Input.Mode != "caller" || !d.Input.TLPktDrop {
 		t.Errorf("input の既定値が仕様と違う: %+v", d.Input)
 	}
@@ -47,6 +47,8 @@ func TestValidateRanges(t *testing.T) {
 		{"latency 10001", func(c *Config) { c.Input.LatencyMS = 10001 }, "input.latency_ms"},
 		{"timeout 999", func(c *Config) { c.Input.TimeoutMS = 999 }, "input.timeout_ms"},
 		{"connect 499", func(c *Config) { c.Input.ConnectTimeoutMS = 499 }, "input.connect_timeout_ms"},
+		{"probesize 100", func(c *Config) { c.Input.ProbeSizeBytes = 100 }, "input.probesize_bytes"},
+		{"analyzeduration -1", func(c *Config) { c.Input.AnalyzeDurationMS = -1 }, "input.analyzeduration_ms"},
 		{"width 319", func(c *Config) { c.Video.Width = 319 }, "video.width"},
 		{"width odd", func(c *Config) { c.Video.Width = 1921 }, "video.width"},
 		{"height odd", func(c *Config) { c.Video.Height = 1081 }, "video.height"},
@@ -57,6 +59,8 @@ func TestValidateRanges(t *testing.T) {
 		{"backoff init 49", func(c *Config) { c.Supervisor.BackoffInitialMS = 49 }, "supervisor.backoff_initial_ms"},
 		{"backoff max < init", func(c *Config) { c.Supervisor.BackoffMaxMS = 100 }, "supervisor.backoff_max_ms"},
 		{"backoff max 30001", func(c *Config) { c.Supervisor.BackoffMaxMS = 30001 }, "supervisor.backoff_max_ms"},
+		{"start timeout 999", func(c *Config) { c.Supervisor.StartTimeoutMS = 999 }, "supervisor.start_timeout_ms"},
+		{"start timeout 120001", func(c *Config) { c.Supervisor.StartTimeoutMS = 120001 }, "supervisor.start_timeout_ms"},
 		{"watchdog 999", func(c *Config) { c.Supervisor.WatchdogMinMS = 999 }, "supervisor.watchdog_min_ms"},
 		{"interval 199", func(c *Config) { c.Metrics.IntervalMS = 199 }, "metrics.interval_ms"},
 		{"opacity 0.09", func(c *Config) { c.Overlay.Opacity = 0.09 }, "overlay.opacity"},
@@ -288,5 +292,22 @@ func TestPathsFrom(t *testing.T) {
 	if p.FrameSock != "/run/user/1000/srtrx/frame.sock" || p.ControlSock != "/run/user/1000/srtrx/control.sock" ||
 		p.ConfigFile != "/home/u/.config/srtrx/config.toml" || p.LogFile != "/home/u/.local/state/srtrx/srtrx.log" {
 		t.Errorf("paths: %+v", p)
+	}
+}
+
+func TestStartTimeoutIsLongerThanWatchdogByDefault(t *testing.T) {
+	c := Default()
+	if c.Supervisor.StartTimeoutMS != 15000 {
+		t.Errorf("既定は15秒: %d", c.Supervisor.StartTimeoutMS)
+	}
+	// 送信のキーフレーム間隔が長いと、最初のフレームまで数秒かかる。ウォッチドッグ(3秒)で打ち切ってはいけない。
+	if c.StartTimeoutMSEffective() <= c.WatchdogThresholdMS() {
+		t.Error("起動の待ちは、ウォッチドッグのしきい値より長い")
+	}
+	// しきい値(レイテンシ×倍率)が大きいときは、それより短くしない
+	c.Input.LatencyMS = 9000
+	c.Supervisor.StartTimeoutMS = 5000
+	if got := c.StartTimeoutMSEffective(); got != 18000 {
+		t.Errorf("max(start_timeout, watchdog): %d", got)
 	}
 }
