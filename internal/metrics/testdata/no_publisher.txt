@@ -1,0 +1,75 @@
+# Paths
+paths 0
+paths_inbound_bytes 0
+paths_outbound_bytes 0
+paths_inbound_frames_in_error 0
+
+# Paths (deprecated)
+paths_bytes_received 0
+paths_bytes_sent 0
+paths_readers 0
+
+# SRT connections
+# The remoteAddr label is deprecated.
+srt_conns 0
+srt_conns_packets_sent 0
+srt_conns_packets_received 0
+srt_conns_packets_sent_unique 0
+srt_conns_packets_received_unique 0
+srt_conns_packets_send_loss 0
+srt_conns_packets_received_loss 0
+srt_conns_packets_retrans 0
+srt_conns_packets_received_retrans 0
+srt_conns_packets_sent_ack 0
+srt_conns_packets_received_ack 0
+srt_conns_packets_sent_nak 0
+srt_conns_packets_received_nak 0
+srt_conns_packets_sent_km 0
+srt_conns_packets_received_km 0
+srt_conns_us_snd_duration 0
+srt_conns_packets_received_belated 0
+srt_conns_packets_send_drop 0
+srt_conns_packets_received_drop 0
+srt_conns_packets_received_undecrypt 0
+srt_conns_bytes_sent 0
+srt_conns_bytes_received 0
+srt_conns_bytes_sent_unique 0
+srt_conns_bytes_received_unique 0
+srt_conns_bytes_received_loss 0
+srt_conns_bytes_retrans 0
+srt_conns_bytes_received_retrans 0
+srt_conns_bytes_received_belated 0
+srt_conns_bytes_send_drop 0
+srt_conns_bytes_received_drop 0
+srt_conns_bytes_received_undecrypt 0
+srt_conns_us_packets_send_period 0
+srt_conns_packets_flow_window 0
+srt_conns_packets_flight_size 0
+srt_conns_ms_rtt 0
+srt_conns_mbps_send_rate 0
+srt_conns_mbps_receive_rate 0
+srt_conns_mbps_link_capacity 0
+srt_conns_bytes_avail_send_buf 0
+srt_conns_bytes_avail_receive_buf 0
+srt_conns_mbps_max_bw 0
+srt_conns_bytes_mss 0
+srt_conns_packets_send_buf 0
+srt_conns_bytes_send_buf 0
+srt_conns_ms_send_buf 0
+srt_conns_ms_send_tsb_pd_delay 0
+srt_conns_packets_receive_buf 0
+srt_conns_bytes_receive_buf 0
+srt_conns_ms_receive_buf 0
+srt_conns_ms_receive_tsb_pd_delay 0
+srt_conns_packets_reorder_tolerance 0
+srt_conns_packets_received_avg_belated_time 0
+srt_conns_packets_send_loss_rate 0
+srt_conns_packets_received_loss_rate 0
+srt_conns_outbound_frames_discarded 0
+
+# MoQ sessions
+# The remoteAddr label is deprecated.
+moq_sessions 0
+moq_sessions_inbound_bytes 0
+moq_sessions_outbound_bytes 0
+

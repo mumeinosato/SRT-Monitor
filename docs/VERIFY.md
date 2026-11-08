@@ -1,0 +1,115 @@
+# VERIFY — 実機で確かめること、確かめた結果
+
+2026-11-08 に、Linux のコンテナ(Ubuntu 24.04、ffmpeg 6.1.1、GTK 4.14.5、MediaMTX v1.21.3、Xvfb)で通した結果と、
+**実機でしか確かめられないこと**の手順をまとめる。受け入れテストの番号は仕様書の T1〜T17。
+
+## 結果の一覧
+
+| ID | 結果 | 実測 |
+| --- | --- | --- |
+| T1 ビルド | 合格 | `go vet ./...`、`go test ./...`(`-race` も)、`make build` |
+| T2 基本表示 | 合格(5分) | 300サンプルで `fps<29` の秒が0、最小 29.0、ffmpeg 再起動0、最大フレーム遅延 41ms |
+| T3 レイテンシ反映 | 合格 | `latency_ms=500` → `srt_conns_ms_receive_tsb_pd_delay{state="read"}` = 500(設定ファイル、GUIの適用の両方) |
+| T4 ffmpeg 強制終了 | 合格 | 3.2秒で映像復帰(目標 5秒以内) |
+| T5 ffmpeg 固まり | 合格 | 停止から約4秒で強制終了→再起動、2.6秒で映像復帰。障害履歴は「ウォッチドッグ(フレームが3.0秒来ない)」 |
+| T6 プレイヤー強制終了 | 合格 | 再起動ループ(`RestartSec=1` 相当)で 4.5秒(目標 10秒以内) |
+| T7 制御強制終了 | 合格 | 子(MediaMTX、ffmpeg)は 0.5秒以内に道連れで終了。12.1秒で映像復帰(目標 15秒以内)。ポート使用中のエラー0件 |
+| T8 MediaMTX 強制終了 | 合格 | 11.8秒で送信が再接続して映像復帰(目標 20秒以内) |
+| T9 ポート衝突 | 合格 | 「ポート使用中(外部のMediaMTXが動いている可能性)」を記録。外部の MediaMTX は生きたまま |
+| T10 短い断 | **条件つきで合格** | 下記の注意を参照 |
+| T11 長い断 | 合格 | 15秒の断。断を外してから 8.6秒で映像復帰(目標 30秒以内)。断の間は最後のフレームを保持し、`再接続中` |
+| T12 累計の保持 | 合格 | 再接続(id が変わる)でロス 1287 が 0 に戻らない。`SIGUSR1`(リセット)で 0 に戻る |
+| T13 統計の取得失敗 | 合格 | `stats_ok=false`、タイルはグレーの `--`、映像は 30fps のまま |
+| T14 プレイヤー停止/再開 | 合格 | 10秒の `SIGSTOP` で ffmpeg は同じ pid のまま(道連れなし)。再開後 2.5秒で `frame_age_ms<200` |
+| T15 設定ファイル破損 | 合格 | 壊れた `config.toml` を理由つきで退け、`bak1` で起動(ログと状態画面に出る) |
+| T16 自己診断 | 合格 | PATH に ffmpeg が無いと理由を出し、10秒ごとに再診断。戻すと自動で始まる |
+| T17 長時間 | **未実施(2時間)** | 5分間の観測では RSS は増えず(controller 147→95MB、player 175→149MB)、FD は 17/16 で横ばい |
+
+### T10 についての注意(仕様書の試験手順との食い違い)
+
+仕様書のテスト用送信は `latency=1000000`(1秒)。この条件で 2秒の断を入れると:
+
+- ffmpeg は再起動せず、ドロップは 0 のまま、ロスと再送の累計は増える(ロス +1214、再送 +604)
+- **ただし `fps<29` の秒が 2 秒出る**(映像が約1秒凍って追いつく)
+
+送信側の latency を断より長く(3秒)すると、`fps<29` の秒は 0、ドロップ 0、ロスと再送の累計だけが増え、合格する。
+つまり T10 の合否は「**送信側の latency ≥ 断の長さ**」で決まる。受信機の `input.latency_ms` は、
+MediaMTX→ffmpeg のループバック区間にしか効かないので、送信側 OBS→MediaMTX の断は救えない。
+**本番の送信側(OBS)の SRT latency を、想定する断より長く設定すること。** 仕様書の T10 の手順も、
+送信側 latency を 3秒にするのが正しいと思われる。
+
+### 試験環境の代用品
+
+- **systemd**: 無いので、`sleep 1` を挟む再起動ループで `Restart=always` / `RestartSec=1` を代用した。
+- **netem**: `tc` が無いので、送信側と MediaMTX の間に UDP 中継(双方向を丸ごと捨てるスイッチ付き)を挟んで、
+  `netem loss 100%` を代用した。実機では仕様書どおり `tc qdisc add dev {IF} root netem loss 100%` で再確認すること。
+- **画面**: Xvfb(ウィンドウマネージャ無し)。全画面とモニター選択は効かない。ソフトウェア描画(`GSK_RENDERER=cairo`)。
+
+## 実機で確かめる手順
+
+### ハードウェアデコード(VAAPI、QSV)
+
+実装済みだが、この環境では試せていない(GPU が無い)。既定は `none`。受け入れテストには含めない。
+
+1. `vainfo` で VAAPI が使えることを確かめる(`/dev/dri/renderD128`)。
+2. GUI の「映像 → ハードウェアデコード」で `vaapi` を選び、「適用して再起動」。
+3. 映像が出れば、ログの ffmpeg の引数に `-hwaccel vaapi ... -vf hwdownload,format=nv12,scale=...` が出ている。
+4. 失敗するときは、起動後2秒以内の終了が3回続いて `hw_fallback` が真になり、プレイヤーのバッジの横に `SW` が出る。
+   設定を適用するか、アプリを再起動するまで、ソフトウェアデコードで動く。
+5. QSV も同様に、`-hwaccel qsv -hwaccel_output_format qsv` と `hwdownload,format=nv12` で確かめる。
+
+### 実機のFPS(T2)
+
+ミニPCの機種が決まったら、5分間以上の表示で、状態画面の「実測FPS」が毎秒 29 以上であることを確かめる。
+1080p30 の生フレームは約 187MB/s。ソフトウェアのスケールとRGB変換が CPU を使う。足りなければ
+解像度(設定の `video.width` / `video.height`)を下げるか、ハードウェアデコードを使う。
+
+### 全画面とモニター選択
+
+Xvfb ではウィンドウマネージャが無く、確かめられていない。
+
+1. 実機で `display.fullscreen = true`、`display.monitor = "primary"` で、全画面になること。
+2. `xrandr` / `wayland` のコネクター名(例 `HDMI-A-1`)を `display.monitor` に入れて、そのモニターで全画面になること。
+3. 全画面のとき、マウスカーソルが見えないこと。
+4. `primary` は、GTK4 に共通のAPIが無いため、コンポジタが選ぶモニターで全画面にするだけ(`docs/DECISIONS.md`)。
+
+### systemd(T6、T7)
+
+```bash
+make install
+systemctl --user daemon-reload
+systemctl --user enable --now srtrx-player.service srtrx.service
+```
+
+1. T6: `kill -9 $(pgrep -x srtrx-player)` → systemd が再起動し、10秒以内に映像が戻る。
+2. T7: `kill -9 $(pgrep -x srtrx)` → プレイヤーが最後のフレームと `制御切断`(3秒後)を出し、15秒以内に映像が戻る。
+3. ユーザーサービスを、ログアウト後も動かすなら `loginctl enable-linger $USER`。
+
+### OBS の自動再接続
+
+アプリの外の設定。本番前に、OBS の「自動再接続」を有効にし、MediaMTX の再起動(T8)で映像が戻ることを確かめる。
+OBS の SRT の `latency` は、想定する断より長くする(上記 T10)。
+
+### 2時間の稼働(T17)
+
+```bash
+# 2時間、1分ごとに RSS と FD を記録する
+while sleep 60; do
+  for n in srtrx srtrx-player; do
+    p=$(pgrep -x $n); echo "$(date +%T) $n rss=$(awk '/VmRSS/{print $2/1024}' /proc/$p/status)MB fd=$(ls /proc/$p/fd | wc -l)"
+  done
+done
+```
+
+合格条件は、制御とプレイヤーの RSS の増加が 50MB 未満で、FD の数が増え続けないこと。展示がそれより長いなら、その長さへ延ばす。
+
+## 見つけて直した問題(再発防止の記録)
+
+- **プレイヤーのメモリリーク**: フレームごとに gotk4 経由で `GdkMemoryTexture`(約6MB)を作ると、解放が追いつかず、
+  30fps で RSS が毎秒約180MB増えた。フレームの表示だけ cgo の薄皮(`internal/player/shim.go`)で GTK の C API を
+  直接呼ぶ方式にして、解消した。`NewBytes`(コピー)は 200枚で 1.2GB、`NewBytesWithGo` は単体では漏れないが
+  実アプリでは漏れた。どちらも gotk4 の解放が「Goのファイナライザ → メインループへ依頼」の経路であることが背景。
+- **gotk4 の版**: v0.4.1 は Ubuntu 24.04 の glib 2.80 でcgoのビルドが通らない。v0.3.1 に固定した。
+- **MediaMTX が作業ディレクトリに作る `auto.crt` / `auto.key`**: 作業ディレクトリを設定ファイルの場所に固定し、
+  `.gitignore` にも入れた(秘密鍵をコミットしないため)。
+- **状態画面が真っ白**: 同じウィジェットを2か所の親に入れていた(`gtk_widget_set_parent` のアサーション)。

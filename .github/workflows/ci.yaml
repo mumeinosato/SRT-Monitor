@@ -1,0 +1,51 @@
+name: ci
+
+# push だけで動かす。pull_request でも動かすと、同じコミットを2回ビルドするうえ、
+# PR の実行はフィーチャーブランチの push が作ったキャッシュを引き継げず、
+# gotk4(cgo)を一からコンパイルし直す(約10分)。
+# チェック結果は同じコミットに付くので、PR の画面にはこの実行の結果が出る。
+on:
+  push:
+  workflow_dispatch:
+
+# 同じブランチへ続けて push したら、古い実行は止める
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Go のビルドキャッシュ(gotk4 のcgoコンパイル結果を含む)を go.sum をキーに保存・復元する
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # gotk4(cgo)のビルドに GTK4 と gobject-introspection の開発ファイルが要る。
+      # テストは GUI を開かず、ffmpeg も要らない(自己診断のテストは偽の ffmpeg を使う)。
+      - name: apt
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libgtk-4-dev libgirepository1.0-dev pkg-config
+
+      # MediaMTX の公式バイナリを取得して SHA-256 を検証する(以降の make は取得済みとして飛ばす)
+      - run: make fetch-mediamtx
+
+      - name: T1 go vet
+        run: go vet ./...
+
+      - name: T1 go test
+        run: go test ./...
+
+      - name: T1 make build
+        run: make build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srtrx-linux-amd64
+          path: bin/
