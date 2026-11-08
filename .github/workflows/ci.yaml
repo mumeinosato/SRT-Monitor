@@ -88,6 +88,12 @@ jobs:
           systemctl --user enable --now srtrx-player.service srtrx.service
           ```
           EOF
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/$name.tar.gz" "dist/$name.tar.gz.sha256" \
-            --title "srtrx $GITHUB_REF_NAME" --notes-file notes.md --generate-notes
+          files=("dist/$name.tar.gz" "dist/$name.tar.gz.sha256")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # 画面などで先にリリースが作られていたら、ファイルを上書きで添付し、説明文も更新する
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "srtrx $GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --title "srtrx $GITHUB_REF_NAME" --notes-file notes.md --generate-notes
+          fi
