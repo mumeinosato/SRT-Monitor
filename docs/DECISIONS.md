@@ -34,3 +34,4 @@
 | 2026-11-08 | 描画のタイミング | フレームクロック(`AddTickCallback`)で最新の1枚を取る(仕様どおり) | タイマー方式でもリークは変わらなかったので、仕様を変えない |
 | 2026-11-08 | MediaMTX の作業ディレクトリ | 設定ファイル(`mediamtx.yml`)と同じディレクトリで起動 | MediaMTX が作業ディレクトリへ自己署名の証明書(`auto.crt`/`auto.key`)を作るため。リポジトリや `$HOME` を汚さない |
 | 2026-11-08 | UIのモダン化 | libadwaita は使わず、GTK4 + CSS(暗色テーマ、カード、ピル型タブ、スイッチ)。色は `@define-color` に集める。統計タイルはプレイヤーと同じ `player.Snapshot.Tiles` を使う | gotk4 の既定の依存だけで済み(判断規則6)、オーバーレイと制御画面で値と色の規則が食い違わない |
+| 2026-11-08 | オーバーレイの文言 | ラベルと値を英語にする(CONNECTION / DROPPED / LOSS / RETRANS / FRAME ERRORS / RTT / FPS / NO SIGNAL / RESTARTS、Connected / Offline、バッジは Connecting / Reconnecting / Stopped / Control lost)。大きさも一回り小さくした | ユーザーの指示(日本語だと野暮ったい、表示が大きい)。仕様書のタイルの日本語名は、色の規則と元の指標は変えずに置き換えた。制御GUIの文言は日本語のまま |

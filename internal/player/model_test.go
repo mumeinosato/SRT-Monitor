@@ -47,8 +47,8 @@ func TestColorRules(t *testing.T) {
 		value string
 		color string
 	}{
-		{"接続中は緑", nil, "connection", "接続中", ColorGreen},
-		{"切断は赤", func(s *Snapshot) { s.Stats.Connected = false }, "connection", "切断", ColorRed},
+		{"接続中は緑", nil, "connection", "Connected", ColorGreen},
+		{"切断は赤", func(s *Snapshot) { s.Stats.Connected = false }, "connection", "Offline", ColorRed},
 		{"ドロップ0", nil, "drop", "0", ColorNeutral},
 		{"ドロップ1以上は赤", func(s *Snapshot) { s.Stats.Drop = 1 }, "drop", "1", ColorRed},
 		{"ロス0", nil, "loss", "0", ColorNeutral},
@@ -87,7 +87,7 @@ func TestStatsFailureGraysEverythingButKeepsNothingElse(t *testing.T) {
 func TestDisconnectedRedAndOnlyRTTDashed(t *testing.T) {
 	s := snap(func(s *Snapshot) { s.Stats.Connected = false; s.Stats.Loss = 7 })
 	ts := s.Tiles(-1)
-	if c := tileByID(ts, "connection"); c.Value != "切断" || c.Color != ColorRed {
+	if c := tileByID(ts, "connection"); c.Value != "Offline" || c.Color != ColorRed {
 		t.Errorf("%+v", c)
 	}
 	if r := tileByID(ts, "rtt"); r.Value != "--" || r.Color != ColorGray {
@@ -105,7 +105,7 @@ func TestSelectedTilesOnly(t *testing.T) {
 		s.State.RestartCount = 4
 	})
 	ts := s.Tiles(1500 * time.Millisecond)
-	if len(ts) != 3 || ts[0].Value != "30.0" || ts[1].Value != "1.5 秒" || ts[1].Color != ColorOrange || ts[2].Value != "4" {
+	if len(ts) != 3 || ts[0].Value != "30.0" || ts[1].Value != "1.5 s" || ts[1].Color != ColorOrange || ts[2].Value != "4" {
 		t.Errorf("%+v", ts)
 	}
 	if v := tileByID(snap(func(s *Snapshot) { s.Cfg.Overlay.Tiles = []string{"no_signal"} }).Tiles(-1), "no_signal"); v.Value != "--" {
@@ -120,11 +120,11 @@ func TestBadges(t *testing.T) {
 		text  string
 		color string
 	}{
-		{ipc.StateStarting, -1, "接続中", ColorYellow},
+		{ipc.StateStarting, -1, "Connecting", ColorYellow},
 		{ipc.StateRunning, 0, "", ""},
-		{ipc.StateBackoff, 4200 * time.Millisecond, "再接続中 4秒", ColorOrange},
-		{ipc.StateBackoff, -1, "再接続中", ColorOrange},
-		{ipc.StateStopped, 0, "停止中", ColorGray},
+		{ipc.StateBackoff, 4200 * time.Millisecond, "Reconnecting 4s", ColorOrange},
+		{ipc.StateBackoff, -1, "Reconnecting", ColorOrange},
+		{ipc.StateStopped, 0, "Stopped", ColorGray},
 	}
 	for _, c := range cases {
 		s := snap(func(s *Snapshot) { s.State.State = c.state })
@@ -151,7 +151,7 @@ func TestControlLostBadgeSeparateAndHidesStateBadge(t *testing.T) {
 	if b := s.StateBadge(1 * time.Second); b.Text != "" {
 		t.Error("制御切断中は、古い状態のバッジを出さない")
 	}
-	if b := s.ControlLostBadge(); b.Text != "制御切断" || b.Color != ColorGray {
+	if b := s.ControlLostBadge(); b.Text != "Control lost" || b.Color != ColorGray {
 		t.Errorf("%+v", b)
 	}
 	if b := snap(nil).ControlLostBadge(); b.Text != "" {

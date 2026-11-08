@@ -130,42 +130,42 @@ func (s Snapshot) tile(id string, age time.Duration) TileView {
 	case "connection":
 		switch {
 		case !statsOK:
-			return gray("接続状態")
+			return gray("CONNECTION")
 		case st.Connected:
-			return TileView{ID: id, Title: "接続状態", Value: "接続中", Color: ColorGreen}
+			return TileView{ID: id, Title: "CONNECTION", Value: "Connected", Color: ColorGreen}
 		default:
-			return TileView{ID: id, Title: "接続状態", Value: "切断", Color: ColorRed}
+			return TileView{ID: id, Title: "CONNECTION", Value: "Offline", Color: ColorRed}
 		}
 	case "drop":
-		return count("ドロップ", st.Drop, ColorRed)
+		return count("DROPPED", st.Drop, ColorRed)
 	case "loss":
-		return count("ロス", st.Loss, ColorOrange)
+		return count("LOSS", st.Loss, ColorOrange)
 	case "retrans":
-		t := count("再送受信", st.Retrans, "")
+		t := count("RETRANS", st.Retrans, "")
 		if t.Color == ColorNeutral {
 			t.Color = ColorBlue
 		}
 		return t
 	case "frame_errors":
-		return count("フレームエラー", st.FrameErrors, ColorRed)
+		return count("FRAME ERRORS", st.FrameErrors, ColorRed)
 	case "rtt":
 		if !statsOK || !st.Connected { // 切断のときは RTT だけ "--"
 			return gray("RTT")
 		}
 		return TileView{ID: id, Title: "RTT", Value: fmt.Sprintf("%.2f ms", st.RTTMS), Color: ColorBlue}
 	case "fps":
-		return TileView{ID: id, Title: "受信FPS", Value: fmt.Sprintf("%.1f", s.FPS), Color: ColorNeutral}
+		return TileView{ID: id, Title: "FPS", Value: fmt.Sprintf("%.1f", s.FPS), Color: ColorNeutral}
 	case "no_signal":
 		if age < 0 {
-			return TileView{ID: id, Title: "無信号時間", Value: "--", Color: ColorGray}
+			return TileView{ID: id, Title: "NO SIGNAL", Value: "--", Color: ColorGray}
 		}
 		c := ColorNeutral
 		if age >= time.Second {
 			c = ColorOrange
 		}
-		return TileView{ID: id, Title: "無信号時間", Value: fmt.Sprintf("%.1f 秒", age.Seconds()), Color: c}
+		return TileView{ID: id, Title: "NO SIGNAL", Value: fmt.Sprintf("%.1f s", age.Seconds()), Color: c}
 	case "restarts":
-		return TileView{ID: id, Title: "ffmpeg再起動", Value: fmt.Sprintf("%d", s.State.RestartCount), Color: ColorNeutral}
+		return TileView{ID: id, Title: "RESTARTS", Value: fmt.Sprintf("%d", s.State.RestartCount), Color: ColorNeutral}
 	}
 	return TileView{ID: id, Title: id, Value: "?", Color: ColorGray}
 }
@@ -187,14 +187,14 @@ func (s Snapshot) StateBadge(lastFrameAge time.Duration) Badge {
 	b := Badge{SW: s.State.HWFallback}
 	switch s.State.State {
 	case ipc.StateStarting:
-		b.Text, b.Color = "接続中", ColorYellow
+		b.Text, b.Color = "Connecting", ColorYellow
 	case ipc.StateBackoff:
-		b.Text, b.Color = "再接続中", ColorOrange
+		b.Text, b.Color = "Reconnecting", ColorOrange
 		if lastFrameAge >= 0 {
-			b.Text += fmt.Sprintf(" %d秒", int(lastFrameAge.Seconds()))
+			b.Text += fmt.Sprintf(" %ds", int(lastFrameAge.Seconds()))
 		}
 	case ipc.StateStopped:
-		b.Text, b.Color = "停止中", ColorGray
+		b.Text, b.Color = "Stopped", ColorGray
 	default: // running: バッジなし
 		b.SW = false
 	}
@@ -206,7 +206,7 @@ func (s Snapshot) ControlLostBadge() Badge {
 	if !s.Cfg.Display.ShowStateBadge || !s.ControlLost {
 		return Badge{}
 	}
-	return Badge{Text: "制御切断", Color: ColorGray}
+	return Badge{Text: "Control lost", Color: ColorGray}
 }
 
 // ShowNoSignal は、無信号時の表示(黒、画像)へ切り替えるべきか。

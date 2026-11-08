@@ -26,8 +26,8 @@ func css(scale float64) string {
 window.player { background: #000; }
 .tiles { padding: %s; }
 .tile { background: rgba(14,16,21,0.88); border: 1px solid rgba(255,255,255,0.09); border-top: %s solid rgba(255,255,255,0.18);
-        border-radius: %s; padding: %s %s; margin: 0 %s; min-width: %s; box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
-.tile .title { font-size: %s; font-weight: 600; letter-spacing: 0.5px; color: rgba(255,255,255,0.62); }
+        border-radius: %s; padding: %s %s; margin: 0 %s; min-width: %s; box-shadow: 0 4px 16px rgba(0,0,0,0.45); }
+.tile .title { font-size: %s; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.55); }
 .tile .value { font-size: %s; font-weight: 700; color: #f4f6fa; font-feature-settings: "tnum"; }
 .tile-green { border-top-color: #34d399; } .tile-green .value { color: #34d399; }
 .tile-red { border-top-color: #f87171; } .tile-red .value { color: #f87171; }
@@ -35,16 +35,16 @@ window.player { background: #000; }
 .tile-blue { border-top-color: #60a5fa; } .tile-blue .value { color: #60a5fa; }
 .tile-gray { border-top-color: rgba(255,255,255,0.18); } .tile-gray .value { color: rgba(255,255,255,0.45); }
 .tile-yellow { border-top-color: #fbbf24; } .tile-yellow .value { color: #fbbf24; }
-.badge { background: rgba(14,16,21,0.82); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px;
-         padding: 8px 24px; font-size: 26px; font-weight: 700; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+.badge { background: rgba(14,16,21,0.85); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px;
+         padding: 5px 18px; font-size: 18px; font-weight: 700; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
 .badge-yellow { color: #fbbf24; }
 .badge-orange { color: #fb923c; }
 .badge-gray { color: #b4bac6; }
 .badge-neutral { color: #f4f6fa; }
-.sw { background: rgba(14,16,21,0.82); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px;
-      padding: 3px 11px; font-size: 14px; font-weight: 700; color: #b4bac6; margin-left: 8px; }
-.ctl-lost { margin: 14px; font-size: 20px; padding: 6px 18px; }
-`, px(8), px(3), px(14), px(8), px(12), px(4), px(98), px(12), px(26))
+.sw { background: rgba(14,16,21,0.85); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px;
+      padding: 2px 9px; font-size: 11px; font-weight: 700; color: #b4bac6; margin-left: 6px; }
+.ctl-lost { margin: 10px; font-size: 14px; padding: 4px 14px; }
+`, px(6), px(2), px(10), px(6), px(10), px(3), px(104), px(9), px(19))
 }
 
 type tileWidget struct {
@@ -137,7 +137,7 @@ func (g *gui) build() {
 	g.badgeBox = gtk.NewBox(gtk.OrientationHorizontal, 0)
 	g.badgeBox.SetHAlign(gtk.AlignCenter)
 	g.badgeBox.SetVAlign(gtk.AlignEnd)
-	g.badgeBox.SetMarginBottom(24)
+	g.badgeBox.SetMarginBottom(18)
 	g.badge = gtk.NewLabel("")
 	g.badge.AddCSSClass("badge")
 	g.sw = gtk.NewLabel("SW")
@@ -147,7 +147,7 @@ func (g *gui) build() {
 	g.badgeBox.SetVisible(false)
 	ov.AddOverlay(g.badgeBox)
 
-	g.ctlLost = gtk.NewLabel("制御切断")
+	g.ctlLost = gtk.NewLabel("Control lost")
 	g.ctlLost.AddCSSClass("badge")
 	g.ctlLost.AddCSSClass("ctl-lost")
 	g.ctlLost.SetHAlign(gtk.AlignEnd)
@@ -234,9 +234,9 @@ func (g *gui) refresh() {
 	g.updateTiles(snap.Tiles(age))
 	// 下端に出すタイルとバッジが重ならないよう、バッジを上へ逃がす
 	if ov.Position == "bottom" && ov.Enabled && g.showOverlay {
-		g.badgeBox.SetMarginBottom(120)
+		g.badgeBox.SetMarginBottom(90)
 	} else {
-		g.badgeBox.SetMarginBottom(24)
+		g.badgeBox.SetMarginBottom(18)
 	}
 
 	// バッジ
