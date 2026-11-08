@@ -148,7 +148,7 @@ func TestHeartbeatTracksFramesAndPlayerRestart(t *testing.T) {
 	c.ffBase = c.player.FramesTotal
 	now = now.Add(time.Second)
 	c.onHeartbeat(ipc.NewHeartbeat(30, 10, 130))
-	ready := func() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.player.FramesTotal > c.ffBase }
+	ready := c.ffmpegReady
 	if ready() {
 		t.Error("基準から増えていなければ、まだ準備完了ではない")
 	}
@@ -226,5 +226,39 @@ func TestFaultsNewestFirstAndCapped(t *testing.T) {
 	}
 	if f[0].Time.Unix() != 129 || f[len(f)-1].Time.Unix() != 30 {
 		t.Errorf("新しい順: %d ... %d", f[0].Time.Unix(), f[len(f)-1].Time.Unix())
+	}
+}
+
+// 前の ffmpeg が最後のハートビートの後に送ったフレームを、新しい ffmpeg のフレームと取り違えない。
+// 取り違えると、キーフレームを待っている間に running へ進み、ウォッチドッグ(3秒)で止めてしまう。
+func TestFFmpegReadyIgnoresFramesOfPreviousFFmpeg(t *testing.T) {
+	c := newTestController(t)
+	now := time.Unix(1000, 0)
+	c.now = func() time.Time { return now }
+	c.onHeartbeat(ipc.NewHeartbeat(30, 10, 100))
+
+	// 前の ffmpeg は、このハートビートの後もフレームを送ってから止まった(プレイヤーの累計は 115)。
+	// ffmpeg を起動(制御が知っている累計は 100 のまま)
+	c.mu.Lock()
+	c.ffBase = c.player.FramesTotal
+	c.ffBasePending = true
+	c.mu.Unlock()
+	if c.ffmpegReady() {
+		t.Fatal("起動直後は準備完了ではない")
+	}
+	now = now.Add(time.Second)
+	c.onHeartbeat(ipc.NewHeartbeat(5, 900, 115)) // 前の ffmpeg の残り
+	if c.ffmpegReady() {
+		t.Error("前の ffmpeg のフレームで準備完了にしない")
+	}
+	now = now.Add(time.Second)
+	c.onHeartbeat(ipc.NewHeartbeat(0, 1900, 115)) // キーフレーム待ち
+	if c.ffmpegReady() {
+		t.Error("フレームが増えない間は準備完了ではない")
+	}
+	now = now.Add(time.Second)
+	c.onHeartbeat(ipc.NewHeartbeat(30, 10, 140))
+	if !c.ffmpegReady() {
+		t.Error("新しい ffmpeg のフレームで準備完了")
 	}
 }

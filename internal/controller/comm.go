@@ -101,6 +101,11 @@ func (c *Controller) onHeartbeat(h ipc.Heartbeat) {
 	if h.FramesTotal != c.lastTotal {
 		c.lastFrame = now // 「フレームが来た」は frames_total が変わったこと(制御の時計で数える)
 	}
+	if c.ffBasePending {
+		// ffmpeg の起動後、最初のハートビート。前の ffmpeg は止まっているので、そのフレームはここまでに数え終わっている
+		c.ffBase = h.FramesTotal
+		c.ffBasePending = false
+	}
 	c.lastTotal = h.FramesTotal
 	c.player.FPS, c.player.FrameAgeMS, c.player.FramesTotal = h.FPS, h.FrameAgeMS, h.FramesTotal
 	c.player.LastBeat = now

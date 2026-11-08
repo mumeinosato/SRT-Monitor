@@ -93,6 +93,11 @@ func BuildArgs(o Options) []string {
 		a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
 	}
 	a = append(a, "-i", BuildURL(c.Input))
+	// 映像を明示して選ぶ。自動の選択は、入力解析で寸法が分からなかったストリーム(キーフレームの前から繋いだ)を
+	// 選ばず、ffmpeg が `Output file does not contain any stream` で終了してしまう。明示すれば、
+	// デコーダが次のキーフレームを待って映像を出す。MPEG-TS では解析は常に analyzeduration まで続くので、
+	// 解析の上限を大きくしてキーフレームを待たせる方法は、起動のたびに遅れる。
+	a = append(a, "-map", "0:v:0")
 	a = append(a, "-vf", VideoFilter(o.HWAccel, c.Video.Width, c.Video.Height))
 	a = append(a, c.Video.ExtraArgs...) // 出力の直前
 	a = append(a, "-an", "-sn", "-dn")

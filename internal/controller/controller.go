@@ -89,10 +89,15 @@ type Controller struct {
 	poll  *metrics.Poller
 
 	// プレイヤー
-	player    Player
-	ffBase    uint64    // ffmpeg を起動した時点の frames_total(これを超えたら「フレームが来た」)
-	lastTotal uint64    // 直近のハートビートの frames_total
-	lastFrame time.Time // frames_total が最後に増えた時刻(制御の時計)
+	player Player
+	ffBase uint64 // ffmpeg を起動した時点の frames_total(これを超えたら「フレームが来た」)
+	// ffBasePending は、ffmpeg の起動後のハートビートをまだ受けていない間 true。
+	// 起動時の player.FramesTotal は最大1秒古く、前の ffmpeg がその後に送ったフレームを含まない。
+	// それを基準にすると、次のハートビートで「新しい ffmpeg のフレームが来た」と誤り、
+	// キーフレームを待っている間に、ウォッチドッグ(3秒)で止めてしまう。
+	ffBasePending bool
+	lastTotal     uint64    // 直近のハートビートの frames_total
+	lastFrame     time.Time // frames_total が最後に増えた時刻(制御の時計)
 
 	// MediaMTX
 	mtxLastOK  time.Time
@@ -193,13 +198,9 @@ func (c *Controller) buildSupervisors() {
 	}, c.nowClock(), false)
 
 	c.ffSV = supervisor.New(supervisor.Target{
-		Name:  "ffmpeg",
-		Start: c.startFFmpeg,
-		Ready: func() bool {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			return c.player.FramesTotal > c.ffBase
-		},
+		Name:      "ffmpeg",
+		Start:     c.startFFmpeg,
+		Ready:     c.ffmpegReady,
 		LastAlive: func() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.lastFrame },
 		// 起動してから最初のフレームまでは、キーフレームを待つので、ウォッチドッグより長く取る
 		StartTimeout: func() time.Duration {
@@ -224,6 +225,14 @@ func (c *Controller) buildSupervisors() {
 		},
 		OnChange: func(supervisor.Snapshot) { c.pushState() },
 	}, c.nowClock(), false)
+}
+
+// ffmpegReady は、いまの ffmpeg が最初のフレームを出したか。
+// 起動後のハートビートで取り直した基準を、frames_total が超えたら真。
+func (c *Controller) ffmpegReady() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.ffBasePending && c.player.FramesTotal > c.ffBase
 }
 
 type clockFn func() time.Time
@@ -311,6 +320,7 @@ func (c *Controller) startFFmpeg() (supervisor.Runner, error) {
 	// フレーム判定の基準を取り直す
 	c.mu.Lock()
 	c.ffBase = c.player.FramesTotal
+	c.ffBasePending = true // 起動後の最初のハートビートで取り直す
 	c.lastFrame = c.now()
 	c.mu.Unlock()
 
