@@ -127,6 +127,21 @@ GTK 版と同じ試験を、lite 版(既定ビルド、`CGO_ENABLED=0`)で、Xvf
 - qemu-arm / qemu-aarch64 上で、controller の起動、player の X11(Xvfb)描画、オーバーレイの合成が動く。
 - **実機の Raspberry Pi では未確認。** 手順は `docs/RASPBERRY_PI.md`。
 
+## 送信側の latency と、回線の断(5秒の断を映像に出さない)
+
+UDP 中継(`relay.py`、netem の代用)で、送信 → 中継 → MediaMTX の間のパケットを、全て捨てた。1080p30、lite 版。
+
+| 送信の latency | 断 | 最大 frame_age | ffmpeg の再起動 |
+| --- | --- | --- | --- |
+| 1 秒 | 5 秒 | 3414ms(映像が止まる) | 1 |
+| 6 秒 | 5 秒 | 41ms(止まらない) | 0 |
+| 6 秒 | 6 秒 | 836ms | 4 |
+| 6 秒 | 8 秒 | 2840ms | 6 |
+
+受信機の `input.latency_ms` を上げても、効かない。MediaMTX が切れた送信者の読み手を閉じるので、ffmpeg 側のバッファは捨てられる。
+断を吸収するのは、OBS→MediaMTX の区間の latency で、MediaMTX は設定を持たず、送信側の値を使う。代償は、画面が常に latency の分だけ遅れること。
+(OBS 自身の停止や再接続は、これでは吸収できない。圧縮ストリームを受信機側で遅延させる仕組みが別に要る。)
+
 ## 実機で確かめる手順
 
 ### ハードウェアデコード(VAAPI、QSV)
