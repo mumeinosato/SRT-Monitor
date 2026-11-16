@@ -61,6 +61,9 @@ type Metrics struct {
 	URL        string `toml:"url" json:"url"`
 	IntervalMS int    `toml:"interval_ms" json:"interval_ms"`
 	TimeoutMS  int    `toml:"timeout_ms" json:"timeout_ms"`
+	// ResetIntervalMS は累計(ロス、ドロップ、再送、フレームエラー)を自動でリセットする間隔。0 でしない。
+	// 長時間の展示で、古い事故が累計に残り続けないようにする。手動のリセットでも数え直す。
+	ResetIntervalMS int `toml:"reset_interval_ms" json:"reset_interval_ms"`
 }
 
 type Display struct {
@@ -114,7 +117,7 @@ func Default() Config {
 			BackoffInitialMS: 200, BackoffMaxMS: 2000, BackoffResetAfterMS: 10000,
 			HWFallbackFailMS: 2000, HWFallbackFailCount: 3,
 		},
-		Metrics: Metrics{URL: "http://127.0.0.1:9998/metrics", IntervalMS: 1000, TimeoutMS: 800},
+		Metrics: Metrics{URL: "http://127.0.0.1:9998/metrics", IntervalMS: 1000, TimeoutMS: 800, ResetIntervalMS: 300000},
 		Display: Display{
 			Monitor: "primary", Fullscreen: true, ShowStateBadge: true,
 			NoSignal: "last_frame", NoSignalImage: "",
@@ -286,6 +289,9 @@ func (c Config) Validate() error {
 
 	rng("metrics.interval_ms", c.Metrics.IntervalMS, 200, 10000)
 	rng("metrics.timeout_ms", c.Metrics.TimeoutMS, 100, 10000)
+	if r := c.Metrics.ResetIntervalMS; r != 0 && (r < 10000 || r > 86400000) {
+		add("metrics.reset_interval_ms", "%d は 0(しない)か、10000 から 86400000(24時間)の範囲でなければならない", r)
+	}
 	if u, err := url.Parse(c.Metrics.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		add("metrics.url", "http(s) のURLでなければならない")
 	}

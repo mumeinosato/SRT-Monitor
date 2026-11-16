@@ -89,11 +89,12 @@ type statusPage struct {
 	fps                           *gtk.Label
 	plPID, plAge                  *gtk.Label
 
-	statGrid *gtk.Grid
-	stats    []*gtkStat
-	statIDs  string
-	banner   *gtk.Label
-	bannerK  string
+	statTitle *gtk.Label
+	statGrid  *gtk.Grid
+	stats     []*gtkStat
+	statIDs   string
+	banner    *gtk.Label
+	bannerK   string
 }
 
 type gtkStat struct {
@@ -144,7 +145,8 @@ func newStatusPage(a *App) *statusPage {
 	body.Append(row)
 
 	// 2段目: 統計(リセットからの累計)
-	body.Append(newLabel("統計(リセットからの累計)", "section-title"))
+	p.statTitle = newLabel("統計(リセットからの累計)", "section-title")
+	body.Append(p.statTitle)
 	p.statGrid = gtk.NewGrid()
 	p.statGrid.SetColumnSpacing(12)
 	p.statGrid.SetRowSpacing(12)
@@ -258,6 +260,7 @@ func (p *statusPage) update(st controller.Status) {
 		p.plAge.SetText("--")
 	}
 
+	p.statTitle.SetText("統計(リセットからの累計 · " + resetLabel(st.Config.Metrics.ResetIntervalMS) + ")")
 	p.updateStats(st)
 	p.updateBanner(st)
 }
@@ -328,5 +331,19 @@ func (p *statusPage) updateBanner(st controller.Status) {
 			p.banner.AddCSSClass("banner-" + kind)
 		}
 		p.bannerK = kind
+	}
+}
+
+// resetLabel は自動リセットの間隔を、見出し用の短い文にする。
+func resetLabel(ms int) string {
+	switch {
+	case ms <= 0:
+		return "自動リセットなし"
+	case ms%3600000 == 0:
+		return fmt.Sprintf("%d時間ごとに自動リセット", ms/3600000)
+	case ms%60000 == 0:
+		return fmt.Sprintf("%d分ごとに自動リセット", ms/60000)
+	default:
+		return fmt.Sprintf("%d秒ごとに自動リセット", ms/1000)
 	}
 }
