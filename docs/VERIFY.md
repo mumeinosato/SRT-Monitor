@@ -102,6 +102,31 @@ v0.1.1 でも、実機(Ubuntu、ffmpeg 8.0.1、OBS、キーフレーム間隔 8�
 
 実機では、既定(5分)のまま、断の5分後に累計が 0 に戻ることを確かめる。
 
+## lite 版(cgo なし。X11 + Web 操作画面)の x86 での受け入れ試験
+
+GTK 版と同じ試験を、lite 版(既定ビルド、`CGO_ENABLED=0`)で、Xvfb 上で行った結果。1080p30 の送信、ffmpeg 6.1.1。
+
+| 試験 | 結果 |
+| --- | --- |
+| T2 基本表示(5分、300サンプル) | 合格。FPS 29 未満 0 回、最小 30.0、ffmpeg 再起動 0、最大フレーム遅延 30ms。RSS: controller 124→70MB、player 44→58MB。FD は一定 |
+| T4 ffmpeg kill -9 | 3.2 秒で復帰(目標 5 秒) |
+| T5 ffmpeg 固まり(kill -STOP) | 6.2 秒で復帰 |
+| T6 プレイヤー kill -9 | 即再起動、映像復帰 0.8 秒(目標 10 秒) |
+| T7 制御 kill -9 | MediaMTX と ffmpeg が道連れで終了、12.1 秒で復帰(目標 15 秒)。ポート使用中エラー 0 |
+| T8 MediaMTX kill -9 | 10.2 秒で復帰(目標 20 秒) |
+| T9 外部 MediaMTX が先に居る | 「ポート使用中」を報告し、外部は無傷。同梱側は backoff |
+| T13 統計取得の失敗 | 映像は継続。ログは 1 件だけ(連続失敗で埋めない) |
+| T14 プレイヤー STOP/CONT | 10 秒停止中も ffmpeg は同じ pid。再開後 0.9 秒で復帰 |
+| T16 ffmpeg なし | 自己診断が失敗を報告。戻すと 5 秒で復帰 |
+
+負荷(x86): 1080p30 で CPU 約 20%、player の RSS 約 56MB。
+
+### ARM(qemu-user での起動確認のみ)
+
+- `GOARCH=arm GOARM=7`、`GOARCH=arm64` で、静的リンクの実行ファイルができる。
+- qemu-arm / qemu-aarch64 上で、controller の起動、player の X11(Xvfb)描画、オーバーレイの合成が動く。
+- **実機の Raspberry Pi では未確認。** 手順は `docs/RASPBERRY_PI.md`。
+
 ## 実機で確かめる手順
 
 ### ハードウェアデコード(VAAPI、QSV)
