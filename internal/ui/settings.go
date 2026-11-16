@@ -116,7 +116,7 @@ func buildTabs() []tab {
 		ints("video.width", "出力解像度 幅", false, func(c *config.Config) *int { return &c.Video.Width }),
 		ints("video.height", "出力解像度 高さ", false, func(c *config.Config) *int { return &c.Video.Height }),
 		ints("video.fps", "表示間隔のFPS(バッファ使用時)", true, func(c *config.Config) *int { return &c.Video.FPS }),
-		enums("video.hwaccel", "ハードウェアデコード", false, []string{"none", "vaapi", "qsv"}, func(c *config.Config) *string { return &c.Video.HWAccel }),
+		enums("video.hwaccel", "ハードウェアデコード", false, []string{"none", "vaapi", "qsv", "v4l2m2m"}, func(c *config.Config) *string { return &c.Video.HWAccel }),
 		ints("video.player_buffer_frames", "プレイヤー側のバッファ(フレーム数, 0=最新優先)", true, func(c *config.Config) *int { return &c.Video.PlayerBufferFrames }),
 		{key: "video.extra_args", label: "ffmpegの追加引数(上級者向け)", kind: kArgs, pArgs: func(c *config.Config) *[]string { return &c.Video.ExtraArgs }},
 	}

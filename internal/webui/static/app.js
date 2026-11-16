@@ -126,7 +126,7 @@ function renderStatus(st) {
   S.ffSince.textContent = fmtSec(st.ffmpeg.since_sec) + (st.ffmpeg.gate_wait ? '(前提の準備待ち)' : '');
   S.ffRestarts.textContent = st.ffmpeg.restart_count + ' 回';
   S.ffErr.textContent = orDash(st.ffmpeg.last_error);
-  const hw = { none: 'ソフトウェア', vaapi: 'VAAPI', qsv: 'QSV' }[st.hwaccel] || st.hwaccel;
+  const hw = { none: 'ソフトウェア', vaapi: 'VAAPI', qsv: 'QSV', v4l2m2m: 'V4L2 M2M' }[st.hwaccel] || st.hwaccel;
   S.ffDecode.textContent = st.hw_fallback ? `ソフトウェア(${st.hwaccel} の失敗が続いたため自動で切替)` : hw;
   S.ffDiag.textContent = st.diag_error ? '失敗' : `合格(ffmpeg ${st.ffmpeg_version})`;
 

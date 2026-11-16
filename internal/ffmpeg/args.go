@@ -93,6 +93,10 @@ func BuildArgs(o Options) []string {
 		a = append(a, "-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD128", "-hwaccel_output_format", "vaapi")
 	case "qsv":
 		a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+	case "v4l2m2m":
+		// Raspberry Pi など。v4l2m2m は -hwaccel ではなく、デコーダ(入力のコーデック指定)。
+		// フレームはシステムメモリへ出るので、-vf は、ソフトウェアのときと同じ(hwdownload は要らない)。
+		a = append(a, "-c:v", "h264_v4l2m2m")
 	}
 	a = append(a, "-i", BuildURL(c.Input))
 	// 映像を明示して選ぶ。自動の選択は、入力解析で寸法が分からなかったストリーム(キーフレームの前から繋いだ)を

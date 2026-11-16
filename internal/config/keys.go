@@ -173,7 +173,7 @@ func Schema() []Field {
 		{Tab: vid, Key: "video.width", Label: "出力解像度 幅", Kind: KindInt},
 		{Tab: vid, Key: "video.height", Label: "出力解像度 高さ", Kind: KindInt},
 		{Tab: vid, Key: "video.fps", Label: "表示間隔のFPS(バッファ使用時)", Kind: KindInt, Live: true},
-		{Tab: vid, Key: "video.hwaccel", Label: "ハードウェアデコード", Kind: KindEnum, Enum: []string{"none", "vaapi", "qsv"}},
+		{Tab: vid, Key: "video.hwaccel", Label: "ハードウェアデコード", Kind: KindEnum, Enum: []string{"none", "vaapi", "qsv", "v4l2m2m"}},
 		{Tab: vid, Key: "video.player_buffer_frames", Label: "プレイヤー側のバッファ(フレーム数, 0=最新優先)", Kind: KindInt, Live: true},
 		{Tab: vid, Key: "video.extra_args", Label: "ffmpegの追加引数(上級者向け)", Kind: KindArgs},
 

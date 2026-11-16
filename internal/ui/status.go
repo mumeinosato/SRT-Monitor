@@ -234,7 +234,7 @@ func (p *statusPage) update(st controller.Status) {
 	p.ffSince.SetText(since(st.FFmpeg, now))
 	p.ffRestarts.SetText(fmt.Sprintf("%d 回", st.FFmpeg.RestartCount))
 	p.ffErr.SetText(orDash(st.FFmpeg.LastError))
-	hw := map[string]string{"none": "ソフトウェア", "vaapi": "VAAPI", "qsv": "QSV"}[st.Config.Video.HWAccel]
+	hw := map[string]string{"none": "ソフトウェア", "vaapi": "VAAPI", "qsv": "QSV", "v4l2m2m": "V4L2 M2M"}[st.Config.Video.HWAccel]
 	if st.HWFallback {
 		hw = "ソフトウェア(" + st.Config.Video.HWAccel + " の失敗が続いたため自動で切替)"
 	}

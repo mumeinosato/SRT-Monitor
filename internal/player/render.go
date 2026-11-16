@@ -245,6 +245,37 @@ func (o Overlay) Signature() string {
 	return b.String()
 }
 
+// fitScale は、フレームの幅に合わせた縮小率(1以下)。小さい解像度(Raspberry Pi の 640x360 など)で、
+// タイルやバッジが、はみ出したり、画面を占めすぎたりしないようにする。1100px 以上は縮めない。
+func fitScale(w int) float64 {
+	if w >= 1100 {
+		return 1
+	}
+	return math.Max(0.5, float64(w)/1100)
+}
+
+// tilesRow は、タイルの並びを作る。並びの合計が幅に収まらなければ、収まるまで縮める(下限 0.4倍)。
+func (r *Renderer) tilesRow(tiles []TileView, w int, scale float64) (sp []*sprite, total, gap int, used float64) {
+	used = scale
+	for tries := 0; tries < 8; tries++ {
+		sp, total = sp[:0], 0
+		gap = int(math.Round(6 * used))
+		for _, t := range tiles {
+			sp = append(sp, r.tileSprite(t, used))
+			total += sp[len(sp)-1].w
+		}
+		if len(sp) > 0 {
+			total += gap * (len(sp) - 1)
+		}
+		avail := w - 2*int(math.Round(8*used))
+		if total <= avail || used <= 0.4 {
+			break
+		}
+		used = math.Max(0.4, used*float64(avail)/float64(total)*0.97)
+	}
+	return
+}
+
 // Compose は buf(bgr0、w×h)へ、タイル・バッジを合成する。
 func (r *Renderer) Compose(buf []byte, w, h int, o Overlay) {
 	r.mu.Lock()
@@ -254,23 +285,15 @@ func (r *Renderer) Compose(buf []byte, w, h int, o Overlay) {
 	if scale <= 0 {
 		scale = 1
 	}
+	fit := fitScale(w)
 	top := cfg.Overlay.Position != "bottom"
 	tilesShown := o.Visible && cfg.Overlay.Enabled
 
+	tileH := 0
 	if tilesShown {
-		tiles := o.Snap.Tiles(o.FrameAge)
-		var sp []*sprite
-		total, gap := 0, int(math.Round(6*scale))
-		for _, t := range tiles {
-			s := r.tileSprite(t, scale)
-			sp = append(sp, s)
-			total += s.w
-		}
-		if len(sp) > 0 {
-			total += gap * (len(sp) - 1)
-		}
+		sp, total, gap, used := r.tilesRow(o.Snap.Tiles(o.FrameAge), w, scale*fit)
 		x := (w - total) / 2
-		margin := int(math.Round(8 * scale))
+		margin := int(math.Round(8 * used))
 		opaq := uint32(math.Round(cfg.Overlay.Opacity * 255))
 		for _, s := range sp {
 			y := margin
@@ -279,27 +302,33 @@ func (r *Renderer) Compose(buf []byte, w, h int, o Overlay) {
 			}
 			blend(buf, w, h, s, x, y, opaq)
 			x += s.w + gap
+			if s.h > tileH {
+				tileH = s.h
+			}
 		}
 	}
 
-	// 状態バッジ(下端中央)。タイルを下に出すときは、上へ逃がす
-	bottomMargin := 18
+	px := func(v float64) float64 { return math.Max(8, math.Round(v*fit)) }
+	pad := func(v int) int { return maxInt(2, int(math.Round(float64(v)*fit))) }
+
+	// 状態バッジ(下端中央)。タイルを下に出すときは、その上へ逃がす
+	bottomMargin := pad(18)
 	if tilesShown && !top {
-		bottomMargin = 90
+		bottomMargin = tileH + pad(24)
 	}
 	if b := o.Snap.StateBadge(o.FrameAge); b.Text != "" {
-		s := r.pillSprite(b.Text, b.Color, 18, 18, 5)
+		s := r.pillSprite(b.Text, b.Color, px(18), pad(18), pad(5))
 		x, y := (w-s.w)/2, h-s.h-bottomMargin
 		blend(buf, w, h, s, x, y, 255)
 		if b.SW {
-			sw := r.pillSprite("SW", ColorGray, 11, 9, 2)
-			blend(buf, w, h, sw, x+s.w+6, y+(s.h-sw.h)/2, 255)
+			sw := r.pillSprite("SW", ColorGray, px(11), pad(9), pad(2))
+			blend(buf, w, h, sw, x+s.w+pad(6), y+(s.h-sw.h)/2, 255)
 		}
 	}
 	// 制御切断(下端右)
 	if cb := o.Snap.ControlLostBadge(); cb.Text != "" {
-		s := r.pillSprite(cb.Text, cb.Color, 14, 14, 4)
-		blend(buf, w, h, s, w-s.w-10, h-s.h-10, 255)
+		s := r.pillSprite(cb.Text, cb.Color, px(14), pad(14), pad(4))
+		blend(buf, w, h, s, w-s.w-pad(10), h-s.h-pad(10), 255)
 	}
 }
 

@@ -251,3 +251,49 @@ func TestRenderWithDefaultConfigTiles(t *testing.T) {
 		t.Errorf("最悪の文言でも 1280px に収まる: %d", total)
 	}
 }
+
+func TestTilesShrinkToFitSmallFrames(t *testing.T) {
+	r := newTestRenderer(t)
+	for _, wh := range [][2]int{{640, 360}, {854, 480}, {960, 540}, {1280, 720}} {
+		w, h := wh[0], wh[1]
+		buf := black(w, h)
+		r.Compose(buf, w, h, ovl(nil))
+		// 左右の端(4画素)にタイルがはみ出さない
+		if nonBlack(buf, w, 0, 0, 4, h/3) != 0 || nonBlack(buf, w, w-4, 0, w, h/3) != 0 {
+			t.Errorf("%dx%d: タイルが左右にはみ出す", w, h)
+		}
+		if nonBlack(buf, w, 0, 0, w, h/4) < 500 {
+			t.Errorf("%dx%d: タイルが描かれない", w, h)
+		}
+	}
+	// 1100px 以上は縮めない(従来の大きさ)
+	if fitScale(1920) != 1 || fitScale(1100) != 1 {
+		t.Error("大きい画面は縮めない")
+	}
+	if got := fitScale(640); got < 0.5 || got >= 1 {
+		t.Errorf("小さい画面は縮める: %v", got)
+	}
+	// 縮めた結果も、読める大きさを保つ(0.4倍未満にはしない)
+	row, total, _, used := r.tilesRow([]TileView{{ID: "a", Title: "FRAME ERRORS", Value: "Connected", Color: ColorGreen}, {ID: "b", Title: "FRAME ERRORS", Value: "Connected", Color: ColorGreen}}, 100, 1.0)
+	if used < 0.4 || len(row) != 2 || total <= 0 {
+		t.Errorf("下限 0.4: used=%v total=%d", used, total)
+	}
+}
+
+func TestBadgesScaleOnSmallFramesAndStayInside(t *testing.T) {
+	r := newTestRenderer(t)
+	w, h := 640, 360
+	buf := black(w, h)
+	r.Compose(buf, w, h, ovl(func(s *Snapshot) {
+		s.Cfg.Overlay.Enabled = false
+		s.State.State = ipc.StateBackoff
+		s.State.HWFallback = true
+		s.ControlLost = true
+	}))
+	if nonBlack(buf, w, 0, h-60, w, h) == 0 {
+		t.Error("下端にバッジが出る")
+	}
+	if nonBlack(buf, w, 0, 0, w, h-120) != 0 {
+		t.Error("バッジが下端から大きくはみ出さない")
+	}
+}

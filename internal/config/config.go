@@ -41,7 +41,7 @@ type Video struct {
 	Width              int      `toml:"width" json:"width"`
 	Height             int      `toml:"height" json:"height"`
 	FPS                int      `toml:"fps" json:"fps"`
-	HWAccel            string   `toml:"hwaccel" json:"hwaccel"` // none | vaapi | qsv
+	HWAccel            string   `toml:"hwaccel" json:"hwaccel"` // none | vaapi | qsv | v4l2m2m
 	PlayerBufferFrames int      `toml:"player_buffer_frames" json:"player_buffer_frames"`
 	ExtraArgs          []string `toml:"extra_args" json:"extra_args"`
 }
@@ -273,7 +273,7 @@ func (c Config) Validate() error {
 		add("video.height", "偶数でなければならない")
 	}
 	rng("video.fps", c.Video.FPS, 5, 60)
-	oneOf("video.hwaccel", c.Video.HWAccel, "none", "vaapi", "qsv")
+	oneOf("video.hwaccel", c.Video.HWAccel, "none", "vaapi", "qsv", "v4l2m2m")
 	rng("video.player_buffer_frames", c.Video.PlayerBufferFrames, 0, 30)
 
 	rng("supervisor.backoff_initial_ms", c.Supervisor.BackoffInitialMS, 50, 5000)

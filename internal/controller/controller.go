@@ -430,6 +430,9 @@ func (c *Controller) diagnose(ctx context.Context) {
 		if !caps.HasUnix {
 			slog.Warn("この ffmpeg には unix プロトコルが無いので、FIFO で受け渡す")
 		}
+		if caps.Untested() {
+			slog.Warn("この版の ffmpeg は、動作確認していない(確認済みは 6.1 以上)。映像が出ないときは、ログの stderr を確かめること", "version", caps.VersionText)
+		}
 	}
 	c.pushState()
 }

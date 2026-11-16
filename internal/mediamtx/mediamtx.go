@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -20,14 +21,10 @@ import (
 	"srtrx/internal/proc"
 )
 
-//go:embed assets/mediamtx_linux_amd64
-var binary []byte
+// binary と sha256File、Arch は、CPU ごとの embed_*.go で定義する(amd64、arm=armv7、arm64)。
 
 //go:embed VERSION
 var versionFile string
-
-//go:embed SHA256
-var sha256File string
 
 //go:embed LICENSE
 var License string
@@ -51,6 +48,9 @@ func sum(b []byte) string {
 
 // VerifyEmbedded は埋め込んだバイナリが固定した SHA-256 と一致するか確かめる。
 func VerifyEmbedded() error {
+	if len(binary) == 0 {
+		return fmt.Errorf("この CPU(%s)向けの MediaMTX は同梱していない。外部の MediaMTX を使う設定(mediamtx.enabled=false)にすること", runtime.GOARCH)
+	}
 	if got := sum(binary); got != ExpectedSHA256() {
 		return fmt.Errorf("同梱の MediaMTX の SHA-256 が一致しない: got %s want %s", got, ExpectedSHA256())
 	}

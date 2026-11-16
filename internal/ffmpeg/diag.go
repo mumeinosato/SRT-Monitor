@@ -11,8 +11,13 @@ import (
 	"time"
 )
 
-// MinMajor は必要な ffmpeg の最低メジャー版(6.0 以上)。
-const MinMajor = 6
+// MinMajor は必要な ffmpeg の最低メジャー版(5.0 以上)。
+// 仕様は 6.0 以上だったが、Raspberry Pi OS (Legacy) = Debian Bookworm の ffmpeg は 5.1 系なので、
+// 5.x を許す。ただし 6.0 未満は動作確認していない(TestedMajor)。-fps_mode が無い版は -vsync 0 で代替する。
+const MinMajor = 5
+
+// TestedMajor は動作確認した最低のメジャー版(6.1.1 と、実機の 8.0.1)。これ未満は、動くが、確認していない。
+const TestedMajor = 6
 
 var versionRe = regexp.MustCompile(`(?m)^ffmpeg version n?(\d+)\.(\d+)(?:\.(\d+))?([^\s]*)`)
 
@@ -54,12 +59,15 @@ func ParseProtocols(out string) (in, outp map[string]bool) {
 	return
 }
 
+// Untested は、版が読めていて、動作確認していない版か。
+func (c Caps) Untested() bool { return c.VersionKnown() && c.Major < TestedMajor }
+
 // DiagError は自己診断の失敗。Reason は画面とログに出す人向けの理由。
 type DiagError struct{ Reason string }
 
 func (e *DiagError) Error() string { return e.Reason }
 
-// Diagnose は ffmpeg を調べる。見つからない・6.0 未満・srt が無い、のどれかなら *DiagError。
+// Diagnose は ffmpeg を調べる。見つからない・5.0 未満・srt が無い、のどれかなら *DiagError。
 // bin が空なら PATH から "ffmpeg" を探す。
 func Diagnose(ctx context.Context, bin string) (Caps, error) {
 	if bin == "" {
@@ -78,7 +86,7 @@ func Diagnose(ctx context.Context, bin string) (Caps, error) {
 	text, major, minor := ParseVersion("ffmpeg version " + trimPrefixVersion(string(vout)))
 	caps := Caps{Path: path, VersionText: text, Major: major, Minor: minor}
 	if major >= 0 && major < MinMajor {
-		return caps, &DiagError{fmt.Sprintf("ffmpeg の版が古い(%s)。6.0 以上が必要", text)}
+		return caps, &DiagError{fmt.Sprintf("ffmpeg の版が古い(%s)。5.0 以上が必要", text)}
 	}
 	if major < 0 {
 		caps.VersionText = firstLine(string(vout))

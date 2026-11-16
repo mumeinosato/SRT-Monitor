@@ -22,7 +22,18 @@ MediaMTX(同梱・制御の子) ──SRT──▶ ffmpeg(制御の子) ──�
 
 プレイヤーは独立して常駐するので、MediaMTX や ffmpeg が入れ替わっても、ウィンドウと最後のフレームが残る。
 
-## 必要なもの(Ubuntu 24.04 LTS, x86_64)
+## 2つの版(GTK 版と lite 版)
+
+| 版 | 画面 | ビルド | 対象 |
+| --- | --- | --- | --- |
+| **GTK 版**(既定。本番はこちら) | GTK4(制御とプレイヤー) | `make build`(cgo、`-tags gtk`) | Ubuntu 24.04 (x86_64) |
+| **lite 版**(実験) | プレイヤー: X11(MIT-SHM)を直接描画。操作画面: ブラウザ(`http://127.0.0.1:8088/`) | `make build-lite`(**cgo なし**) | x86_64、arm(armv7)、arm64。Raspberry Pi は [`docs/RASPBERRY_PI.md`](docs/RASPBERRY_PI.md) |
+
+lite 版は、GTK も cgo も要らず、ビルドは数秒で、クロスビルドできます(`make build-lite GOARCH=arm GOARM=7`)。
+同じソースと機能で、CPU ごとにビルドします(1つの実行ファイルで、x86_64 と ARM の両方は動きません)。
+**lite 版は、x86 での受け入れ試験を通すまで、リリースの既定にしません**(結果は [`docs/VERIFY.md`](docs/VERIFY.md))。
+
+## 必要なもの(GTK 版: Ubuntu 24.04 LTS, x86_64)
 
 ```bash
 sudo apt-get install -y libgtk-4-dev libgirepository1.0-dev pkg-config ffmpeg
