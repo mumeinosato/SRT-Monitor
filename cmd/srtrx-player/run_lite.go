@@ -2,21 +2,8 @@
 
 package main
 
-import (
-	"sync"
+import "srtrx/internal/player"
 
-	"srtrx/internal/player"
-)
-
-var (
-	quitCh   = make(chan struct{})
-	quitOnce sync.Once
-)
-
-// 既定(cgo なし)のプレイヤー。いまは、フレームを受けるだけで描画しない(X11 描画は次の段階)。
-func runPlayer(rt *player.Runtime) int {
-	<-quitCh
-	return 0
-}
-
-func quitPlayer() { quitOnce.Do(func() { close(quitCh) }) }
+// 既定(cgo なし)のプレイヤー: X11(MIT-SHM)。
+func runPlayer(rt *player.Runtime) int { return player.RunX11(rt) }
+func quitPlayer()                      { player.QuitX11() }

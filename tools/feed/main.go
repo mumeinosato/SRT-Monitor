@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"srtrx/internal/frame"
 )
 
 func main() {
@@ -24,6 +26,7 @@ func main() {
 	fps := flag.Int("fps", 30, "送信FPS")
 	n := flag.Int("n", 0, "送るフレーム数(0なら無限)")
 	partial := flag.Bool("partial", false, "終了前に半端なフレームを送る")
+	bpp := flag.Int("bpp", frame.BytesPerPixel, "1画素のバイト数(rgb24 なら3、bgr0 なら4。既定はビルドの種類に合わせる)")
 	flag.Parse()
 
 	conn, err := net.Dial("unix", *sock)
@@ -32,12 +35,12 @@ func main() {
 	}
 	defer conn.Close()
 
-	buf := make([]byte, *w**h*3)
+	buf := make([]byte, *w**h**bpp)
 	tick := time.NewTicker(time.Second / time.Duration(*fps))
 	defer tick.Stop()
 	for i := 0; *n == 0 || i < *n; i++ {
 		<-tick.C
-		render(buf, *w, *h, i)
+		render(buf, *w, *h, *bpp, i)
 		if _, err := conn.Write(buf); err != nil {
 			log.Fatalf("書けない(プレイヤーが落ちた?): %v", err)
 		}
@@ -49,9 +52,9 @@ func main() {
 }
 
 // render は、色が変わる背景と、フレーム番号に合わせて進むバーを描く。
-func render(buf []byte, w, h, n int) {
+func render(buf []byte, w, h, bpp, n int) {
 	r, g, b := byte(n*2), byte(255-n*2), byte(128+n)
-	for i := 0; i < len(buf); i += 3 {
+	for i := 0; i < len(buf); i += bpp {
 		buf[i], buf[i+1], buf[i+2] = r/4, g/4, b/4
 	}
 	// 進行バー(下の1/8)
@@ -59,7 +62,7 @@ func render(buf []byte, w, h, n int) {
 	x1 := (n * 16) % w
 	for y := barY; y < h; y++ {
 		for x := 0; x < x1; x++ {
-			o := (y*w + x) * 3
+			o := (y*w + x) * bpp
 			buf[o], buf[o+1], buf[o+2] = 255, 255, 255
 		}
 	}
@@ -73,7 +76,7 @@ func render(buf []byte, w, h, n int) {
 				if px >= w || py >= h {
 					continue
 				}
-				o := (py*w + px) * 3
+				o := (py*w + px) * bpp
 				if on {
 					buf[o], buf[o+1], buf[o+2] = 255, 255, 0
 				} else {

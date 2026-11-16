@@ -102,7 +102,7 @@ func Extract(binDir string) (string, error) {
 func GenConfig(c config.MediaMTX) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "logLevel: %s\n", c.LogLevel)
-	b.WriteString("rtsp: no\nrtmp: no\nhls: no\nwebrtc: no\napi: no\n")
+	b.WriteString("rtsp: no\nrtmp: no\nhls: no\nwebrtc: no\nmoq: no\napi: no\n")
 	b.WriteString("srt: yes\n")
 	fmt.Fprintf(&b, "srtAddress: %q\n", c.SRTListen)
 	b.WriteString("metrics: yes\n")

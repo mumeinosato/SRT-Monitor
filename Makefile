@@ -4,7 +4,7 @@ SHA256  := $(shell cat internal/mediamtx/SHA256)
 ASSET   := internal/mediamtx/assets/mediamtx_linux_amd64
 URL     := https://github.com/bluenviron/mediamtx/releases/download/v$(VERSION)/mediamtx_v$(VERSION)_linux_amd64.tar.gz
 
-.PHONY: all fetch-mediamtx build test vet install clean
+.PHONY: all fetch-mediamtx build build-gtk build-lite test vet install clean
 
 all: build
 
@@ -21,17 +21,28 @@ fetch-mediamtx:
 		mkdir -p $(dir $(ASSET)); install -m 0755 $$tmp/mediamtx $(ASSET); \
 	fi
 
+# リリースが出す既定の版は、これまでどおり GTK 版(cgo、-tags gtk)。
+# cgo なしの新しい構成(X11 + Web 画面)は、build-lite。受け入れ試験(docs/VERIFY.md)を通すまで、既定を入れ替えない。
 # 埋め込むファイルが無いとビルドが失敗するので、先に fetch-mediamtx を呼ぶ。
-build: fetch-mediamtx
+build: build-gtk
+
+build-gtk: fetch-mediamtx
 	@mkdir -p bin
-	go build -o bin/srtrx ./cmd/srtrx
-	go build -o bin/srtrx-player ./cmd/srtrx-player
+	go build -tags gtk -o bin/srtrx ./cmd/srtrx
+	go build -tags gtk -o bin/srtrx-player ./cmd/srtrx-player
+
+# cgo なし(GTK 不要)。GOARCH=arm GOARM=7 などを付けて、そのままクロスビルドできる。
+build-lite: fetch-mediamtx
+	@mkdir -p bin/lite
+	CGO_ENABLED=0 go build -o bin/lite/srtrx ./cmd/srtrx
+	CGO_ENABLED=0 go build -o bin/lite/srtrx-player ./cmd/srtrx-player
 
 vet: fetch-mediamtx
-	go vet ./...
+	CGO_ENABLED=0 go vet ./...
+	go vet -tags gtk ./...
 
 test: fetch-mediamtx
-	go test ./...
+	CGO_ENABLED=0 go test ./...
 
 install: build
 	install -d $(HOME)/.local/bin $(HOME)/.config/systemd/user
