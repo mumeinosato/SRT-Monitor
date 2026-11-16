@@ -223,9 +223,13 @@ func TestDiagnose(t *testing.T) {
 		t.Fatalf("正常: %+v %v", caps, err)
 	}
 
-	_, err = Diagnose(ctx, fakeFFmpeg(t, "ffmpeg version 5.1.2 Copyright", protocolsSample))
-	if !IsDiagError(err) || !strings.Contains(err.Error(), "6.0") {
-		t.Errorf("版が古い: %v", err)
+	caps, err = Diagnose(ctx, fakeFFmpeg(t, "ffmpeg version 5.1.2 Copyright", protocolsSample))
+	if err != nil || caps.Major != 5 || !caps.Untested() {
+		t.Errorf("5.x は許す(Bookworm の ffmpeg 5.1)。ただし未確認の版として扱う: %+v %v", caps, err)
+	}
+	_, err = Diagnose(ctx, fakeFFmpeg(t, "ffmpeg version 4.3.6 Copyright", protocolsSample))
+	if !IsDiagError(err) || !strings.Contains(err.Error(), "5.0") {
+		t.Errorf("4.x は古い: %v", err)
 	}
 
 	_, err = Diagnose(ctx, fakeFFmpeg(t, "ffmpeg version 6.0 Copyright", "Input:\n  file\nOutput:\n  file\n"))
@@ -263,5 +267,51 @@ func TestProbeOptionsAreConfigurableAndInMicroseconds(t *testing.T) {
 	d := config.Default().Input
 	if d.ProbeSizeBytes <= 32768 || d.AnalyzeDurationMS <= 0 {
 		t.Errorf("既定の解析の上限が小さい: %+v", d)
+	}
+}
+
+func TestPixelFormatFollowsPlayer(t *testing.T) {
+	o := opts(nil)
+	o.PixFmt = "bgr0" // 既定(cgo なし)のプレイヤーは bgr0 で受ける
+	if s := strings.Join(BuildArgs(o), " "); !strings.Contains(s, "-vf scale=1920:1080,format=bgr0 ") {
+		t.Error(s)
+	}
+	o.HWAccel = "vaapi"
+	if s := strings.Join(BuildArgs(o), " "); !strings.Contains(s, "hwdownload,format=nv12,scale=1920:1080,format=bgr0") {
+		t.Error(s)
+	}
+	if s := strings.Join(BuildArgs(opts(nil)), " "); !strings.Contains(s, "format=rgb24") {
+		t.Error("指定が無ければ rgb24")
+	}
+}
+
+func TestV4L2M2MIsADecoderNotAHwaccel(t *testing.T) {
+	o := opts(func(c *config.Config) { c.Video.HWAccel = "v4l2m2m" })
+	args := BuildArgs(o)
+	s := strings.Join(args, " ")
+	if !strings.Contains(s, "-c:v h264_v4l2m2m -i srt://") {
+		t.Errorf("入力の前にデコーダを指定する: %s", s)
+	}
+	if strings.Contains(s, "-hwaccel") || strings.Contains(s, "hwdownload") {
+		t.Errorf("v4l2m2m は -hwaccel でも hwdownload でもない: %s", s)
+	}
+	if !strings.Contains(s, "-vf scale=1920:1080,format=rgb24") {
+		t.Errorf("フレームはシステムメモリなので、ソフトウェアと同じ -vf: %s", s)
+	}
+	// 自動フォールバックで none になれば、デコーダ指定は消える
+	o.HWAccel = "none"
+	if strings.Contains(strings.Join(BuildArgs(o), " "), "h264_v4l2m2m") {
+		t.Error("フォールバック中は指定しない")
+	}
+}
+
+func TestCapsUntested(t *testing.T) {
+	for _, c := range []struct {
+		major int
+		want  bool
+	}{{5, true}, {6, false}, {8, false}, {-1, false}} {
+		if got := (Caps{Major: c.major}).Untested(); got != c.want {
+			t.Errorf("major=%d: %v", c.major, got)
+		}
 	}
 }

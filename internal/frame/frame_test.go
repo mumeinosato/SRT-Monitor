@@ -12,12 +12,12 @@ import (
 )
 
 const tw, th = 4, 2
-const fsz = tw * th * 3
+const fsz = tw * th * 3 // テストは rgb24(3バイト)で
 
 func mk(v byte) []byte { return bytes.Repeat([]byte{v}, fsz) }
 
 func TestPartialFrameDiscarded(t *testing.T) {
-	s := NewStore(tw, th, 0, 30)
+	s := NewStore(tw, th, 3, 0, 30)
 	r := NewReceiver(s)
 	var in bytes.Buffer
 	in.Write(mk(1))
@@ -34,7 +34,7 @@ func TestPartialFrameDiscarded(t *testing.T) {
 }
 
 func TestOnlyLatestKept(t *testing.T) {
-	s := NewStore(tw, th, 0, 30)
+	s := NewStore(tw, th, 3, 0, 30)
 	r := NewReceiver(s)
 	var in bytes.Buffer
 	for i := byte(1); i <= 10; i++ {
@@ -55,7 +55,7 @@ func TestOnlyLatestKept(t *testing.T) {
 }
 
 func TestTakeBeforeAnyFrame(t *testing.T) {
-	s := NewStore(tw, th, 0, 30)
+	s := NewStore(tw, th, 3, 0, 30)
 	if _, ok := s.Take(make([]byte, fsz), 0, time.Now()); ok || s.HasFrame() {
 		t.Error("フレームが無ければ changed=false")
 	}
@@ -65,7 +65,7 @@ func TestTakeBeforeAnyFrame(t *testing.T) {
 }
 
 func TestSocketReplacesConnectionAndKeepsLastFrame(t *testing.T) {
-	s := NewStore(tw, th, 0, 30)
+	s := NewStore(tw, th, 3, 0, 30)
 	r := NewReceiver(s)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -115,7 +115,7 @@ func TestSocketReplacesConnectionAndKeepsLastFrame(t *testing.T) {
 }
 
 func TestSocketPermissions(t *testing.T) {
-	r := NewReceiver(NewStore(tw, th, 0, 30))
+	r := NewReceiver(NewStore(tw, th, 3, 0, 30))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	path := filepath.Join(t.TempDir(), "f.sock")
@@ -130,7 +130,7 @@ func TestSocketPermissions(t *testing.T) {
 }
 
 func TestFIFO(t *testing.T) {
-	s := NewStore(tw, th, 0, 30)
+	s := NewStore(tw, th, 3, 0, 30)
 	r := NewReceiver(s)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -177,7 +177,7 @@ func openFIFOWriter(path string) (io.WriteCloser, error) {
 }
 
 func TestBufferedModePacesAtFPS(t *testing.T) {
-	s := NewStore(tw, th, 3, 10) // 100ms間隔
+	s := NewStore(tw, th, 3, 3, 10) // 100ms間隔
 	t0 := time.Unix(1000, 0)
 	dst := make([]byte, fsz)
 
@@ -217,7 +217,7 @@ func TestBufferedModePacesAtFPS(t *testing.T) {
 }
 
 func TestBufferedOverflowDropsOldest(t *testing.T) {
-	s := NewStore(tw, th, 2, 30)
+	s := NewStore(tw, th, 3, 2, 30)
 	t0 := time.Unix(1000, 0)
 	for i := byte(1); i <= 5; i++ {
 		s.Publish(mk(i), t0)
@@ -233,7 +233,7 @@ func TestBufferedOverflowDropsOldest(t *testing.T) {
 }
 
 func TestResetSizeDropsFrames(t *testing.T) {
-	s := NewStore(tw, th, 0, 30)
+	s := NewStore(tw, th, 3, 0, 30)
 	s.Publish(mk(1), time.Now())
 	s.Reset(6, 4, 0, 30)
 	if s.HasFrame() {
@@ -250,7 +250,7 @@ func TestResetSizeDropsFrames(t *testing.T) {
 }
 
 func TestResetToZeroBufferCollapsesQueue(t *testing.T) {
-	s := NewStore(tw, th, 3, 30)
+	s := NewStore(tw, th, 3, 3, 30)
 	t0 := time.Unix(1, 0)
 	s.Publish(mk(1), t0)
 	s.Publish(mk(2), t0)

@@ -1,3 +1,5 @@
+//go:build gtk
+
 package ui
 
 import (
@@ -89,11 +91,12 @@ type statusPage struct {
 	fps                           *gtk.Label
 	plPID, plAge                  *gtk.Label
 
-	statGrid *gtk.Grid
-	stats    []*gtkStat
-	statIDs  string
-	banner   *gtk.Label
-	bannerK  string
+	statTitle *gtk.Label
+	statGrid  *gtk.Grid
+	stats     []*gtkStat
+	statIDs   string
+	banner    *gtk.Label
+	bannerK   string
 }
 
 type gtkStat struct {
@@ -144,7 +147,8 @@ func newStatusPage(a *App) *statusPage {
 	body.Append(row)
 
 	// 2段目: 統計(リセットからの累計)
-	body.Append(newLabel("統計(リセットからの累計)", "section-title"))
+	p.statTitle = newLabel("統計(リセットからの累計)", "section-title")
+	body.Append(p.statTitle)
 	p.statGrid = gtk.NewGrid()
 	p.statGrid.SetColumnSpacing(12)
 	p.statGrid.SetRowSpacing(12)
@@ -230,7 +234,7 @@ func (p *statusPage) update(st controller.Status) {
 	p.ffSince.SetText(since(st.FFmpeg, now))
 	p.ffRestarts.SetText(fmt.Sprintf("%d 回", st.FFmpeg.RestartCount))
 	p.ffErr.SetText(orDash(st.FFmpeg.LastError))
-	hw := map[string]string{"none": "ソフトウェア", "vaapi": "VAAPI", "qsv": "QSV"}[st.Config.Video.HWAccel]
+	hw := map[string]string{"none": "ソフトウェア", "vaapi": "VAAPI", "qsv": "QSV", "v4l2m2m": "V4L2 M2M"}[st.Config.Video.HWAccel]
 	if st.HWFallback {
 		hw = "ソフトウェア(" + st.Config.Video.HWAccel + " の失敗が続いたため自動で切替)"
 	}
@@ -258,6 +262,7 @@ func (p *statusPage) update(st controller.Status) {
 		p.plAge.SetText("--")
 	}
 
+	p.statTitle.SetText("統計(リセットからの累計 · " + resetLabel(st.Config.Metrics.ResetIntervalMS) + ")")
 	p.updateStats(st)
 	p.updateBanner(st)
 }
@@ -328,5 +333,19 @@ func (p *statusPage) updateBanner(st controller.Status) {
 			p.banner.AddCSSClass("banner-" + kind)
 		}
 		p.bannerK = kind
+	}
+}
+
+// resetLabel は自動リセットの間隔を、見出し用の短い文にする。
+func resetLabel(ms int) string {
+	switch {
+	case ms <= 0:
+		return "自動リセットなし"
+	case ms%3600000 == 0:
+		return fmt.Sprintf("%d時間ごとに自動リセット", ms/3600000)
+	case ms%60000 == 0:
+		return fmt.Sprintf("%d分ごとに自動リセット", ms/60000)
+	default:
+		return fmt.Sprintf("%d秒ごとに自動リセット", ms/1000)
 	}
 }

@@ -1,3 +1,5 @@
+//go:build gtk
+
 package player
 
 import (
@@ -191,7 +193,7 @@ func (g *gui) build() {
 // 受け取りバッファ(g.dst)は使い回す。setFrame がCへコピーするので、取り出し直す必要はない。
 func (g *gui) tick() {
 	w, h := g.rt.Store.Size()
-	if need := w * h * 3; len(g.dst) != need {
+	if need := g.rt.Store.FrameSize(); len(g.dst) != need {
 		g.dst, g.lastSeq = make([]byte, need), 0
 	}
 	seq, changed := g.rt.Store.Take(g.dst, g.lastSeq, time.Now())

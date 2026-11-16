@@ -49,6 +49,9 @@ func TestValidateRanges(t *testing.T) {
 		{"connect 499", func(c *Config) { c.Input.ConnectTimeoutMS = 499 }, "input.connect_timeout_ms"},
 		{"probesize 100", func(c *Config) { c.Input.ProbeSizeBytes = 100 }, "input.probesize_bytes"},
 		{"analyzeduration -1", func(c *Config) { c.Input.AnalyzeDurationMS = -1 }, "input.analyzeduration_ms"},
+		{"reset interval 9999", func(c *Config) { c.Metrics.ResetIntervalMS = 9999 }, "metrics.reset_interval_ms"},
+		{"reset interval 25h", func(c *Config) { c.Metrics.ResetIntervalMS = 86400001 }, "metrics.reset_interval_ms"},
+		{"reset interval negative", func(c *Config) { c.Metrics.ResetIntervalMS = -1 }, "metrics.reset_interval_ms"},
 		{"width 319", func(c *Config) { c.Video.Width = 319 }, "video.width"},
 		{"width odd", func(c *Config) { c.Video.Width = 1921 }, "video.width"},
 		{"height odd", func(c *Config) { c.Video.Height = 1081 }, "video.height"},
@@ -309,5 +312,28 @@ func TestStartTimeoutIsLongerThanWatchdogByDefault(t *testing.T) {
 	c.Supervisor.StartTimeoutMS = 5000
 	if got := c.StartTimeoutMSEffective(); got != 18000 {
 		t.Errorf("max(start_timeout, watchdog): %d", got)
+	}
+}
+
+func TestResetIntervalDefaultIs5MinutesAndZeroMeansOff(t *testing.T) {
+	c := Default()
+	if c.Metrics.ResetIntervalMS != 300000 {
+		t.Errorf("既定は5分: %d", c.Metrics.ResetIntervalMS)
+	}
+	for _, ok := range []int{0, 10000, 300000, 86400000} {
+		c.Metrics.ResetIntervalMS = ok
+		if err := c.Validate(); err != nil {
+			t.Errorf("%d は許す: %v", ok, err)
+		}
+	}
+	// キーが無い既存の config.toml は、既定(5分)になる
+	got, _, err := Parse([]byte("[metrics]\ninterval_ms = 2000\n"))
+	if err != nil || got.Metrics.ResetIntervalMS != 300000 {
+		t.Errorf("キー無しは既定: %v %+v", err, got.Metrics)
+	}
+	// 0 を書けば「しない」
+	got, _, err = Parse([]byte("[metrics]\nreset_interval_ms = 0\n"))
+	if err != nil || got.Metrics.ResetIntervalMS != 0 {
+		t.Errorf("0 はしない: %v %+v", err, got.Metrics)
 	}
 }

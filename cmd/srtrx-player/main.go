@@ -37,9 +37,9 @@ func run() int {
 		slog.Info("終了シグナルを受けた")
 		cancel()
 		time.AfterFunc(2*time.Second, func() { os.Exit(0) })
-		player.Quit()
+		quitPlayer()
 	}()
 
 	slog.Info("プレイヤーを開始した", "pid", os.Getpid())
-	return player.Run(rt)
+	return runPlayer(rt)
 }

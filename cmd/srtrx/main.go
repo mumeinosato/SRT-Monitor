@@ -14,7 +14,6 @@ import (
 	"srtrx/internal/config"
 	"srtrx/internal/controller"
 	"srtrx/internal/logx"
-	"srtrx/internal/ui"
 )
 
 func main() { os.Exit(run()) }
@@ -79,10 +78,10 @@ func run() int {
 		<-sig
 		slog.Info("終了シグナルを受けた")
 		stopAll()
-		ui.Quit()
+		quitUI()
 		time.AfterFunc(3*time.Second, func() { os.Exit(0) })
 	}()
-	code := ui.Run(ctl, logs)
+	code := runUI(ctl, logs)
 	stopAll()
 	return code
 }

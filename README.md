@@ -22,7 +22,18 @@ MediaMTX(同梱・制御の子) ──SRT──▶ ffmpeg(制御の子) ──�
 
 プレイヤーは独立して常駐するので、MediaMTX や ffmpeg が入れ替わっても、ウィンドウと最後のフレームが残る。
 
-## 必要なもの(Ubuntu 24.04 LTS, x86_64)
+## 2つの版(GTK 版と lite 版)
+
+| 版 | 画面 | ビルド | 対象 |
+| --- | --- | --- | --- |
+| **GTK 版**(既定。本番はこちら) | GTK4(制御とプレイヤー) | `make build`(cgo、`-tags gtk`) | Ubuntu 24.04 (x86_64) |
+| **lite 版**(実験) | プレイヤー: X11(MIT-SHM)を直接描画。操作画面: ブラウザ(`http://127.0.0.1:8088/`) | `make build-lite`(**cgo なし**) | x86_64、arm(armv7)、arm64。Raspberry Pi は [`docs/RASPBERRY_PI.md`](docs/RASPBERRY_PI.md) |
+
+lite 版は、GTK も cgo も要らず、ビルドは数秒で、クロスビルドできます(`make build-lite GOARCH=arm GOARM=7`)。
+同じソースと機能で、CPU ごとにビルドします(1つの実行ファイルで、x86_64 と ARM の両方は動きません)。
+**lite 版は、x86 での受け入れ試験を通すまで、リリースの既定にしません**(結果は [`docs/VERIFY.md`](docs/VERIFY.md))。
+
+## 必要なもの(GTK 版: Ubuntu 24.04 LTS, x86_64)
 
 ```bash
 sudo apt-get install -y libgtk-4-dev libgirepository1.0-dev pkg-config ffmpeg
@@ -51,7 +62,7 @@ systemctl --user enable --now srtrx-player.service srtrx.service
 - 設定の「即時」の項目は、変えた瞬間に反映される。「再起動」の項目は **「適用して再起動」** でまとめて反映する(確認ダイアログが出る)。
 - 範囲外の値を入れた欄は赤くなり、「適用」を押せなくなる。
 - 本番ロック中は設定を変更できない。解除はロックボタンと確認ダイアログで行う。
-- 累計のリセット: 制御ウィンドウの「カウンターをリセット」ボタン、`Ctrl+R`、または制御プロセスへ `SIGUSR1`。
+- 累計のリセット: **既定で5分ごとに自動でリセット**する(設定の「監視 → 累計の自動リセット間隔」。`0` で止める。`config.toml` の `metrics.reset_interval_ms`)。手動でも、制御ウィンドウの「カウンターをリセット」ボタン、`Ctrl+R`、または制御プロセスへ `SIGUSR1` でできる。手動のリセットのあとは、そこから1周期あとに次の自動リセットが来る。
 - プレイヤーのホットキー(既定 `o`)で、オーバーレイ全体の表示を切り替える。
 - `srtrx -headless` は GUI 無しで動かす(監督と統計のみ。1秒ごとに状態を1行でログへ出す)。
 
@@ -62,7 +73,10 @@ systemctl --user enable --now srtrx-player.service srtrx.service
 
 - **キーフレーム間隔は 1〜2秒にする。** 受信側は、送信の途中から繋ぐと、次のキーフレームまで映像を出せない。
   間隔が長い(OBS の「自動」など)と、起動や再接続のたびに映像が出るまで待たされる。
-- SRT の `latency` は、想定する断の長さより長くする(受信機の `input.latency_ms` は、MediaMTX→ffmpeg の区間にしか効かない)。
+- **SRT の `latency` は、想定する断の長さより長くする。5秒の断を映像に出さないなら、6秒(URL では `latency=6000000`、単位は ffmpeg の libsrt に従いマイクロ秒。OBS の版で単位が違えば合わせる)。**
+  受信機の `input.latency_ms` は、MediaMTX→ffmpeg の区間にしか効かず、5秒の断には効かない(MediaMTX には、受信側で latency を決める設定が無い。送信側の値が使われる)。
+  代わりに、画面は常に約6秒遅れる。x86 での測定(`docs/VERIFY.md`): 送信 latency 1秒だと、5秒の断で映像が約3.4秒止まり ffmpeg が再起動した。
+  6秒だと、5秒の断で映像は止まらず(最大のフレーム遅延 41ms、再起動 0)、6秒以上の断では止まる。
 - OBS の「自動再接続」を有効にする。
 
 ## 開発用

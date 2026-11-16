@@ -39,6 +39,8 @@ type Options struct {
 	Caps   Caps
 	// HWAccel は実際に使うハードウェアデコード(自動フォールバック中は "none")。
 	HWAccel string
+	// PixFmt は出力する画素形式("rgb24" など。空なら rgb24)。プレイヤーの種類で決まる。
+	PixFmt string
 	// Output は出力先(unix ソケットのパス、または FIFO のパス)。
 	// Caps.HasUnix が偽のときは FIFO として書く。
 	Output string
@@ -69,12 +71,12 @@ func BuildURL(in config.Input) string {
 }
 
 // VideoFilter は -vf の中身。
-func VideoFilter(hwaccel string, w, h int) string {
+func VideoFilter(hwaccel string, w, h int, pixFmt string) string {
 	switch hwaccel {
 	case "vaapi", "qsv":
-		return fmt.Sprintf("hwdownload,format=nv12,scale=%d:%d,format=rgb24", w, h)
+		return fmt.Sprintf("hwdownload,format=nv12,scale=%d:%d,format=%s", w, h, pixFmt)
 	default:
-		return fmt.Sprintf("scale=%d:%d,format=rgb24", w, h)
+		return fmt.Sprintf("scale=%d:%d,format=%s", w, h, pixFmt)
 	}
 }
 
@@ -91,6 +93,10 @@ func BuildArgs(o Options) []string {
 		a = append(a, "-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD128", "-hwaccel_output_format", "vaapi")
 	case "qsv":
 		a = append(a, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+	case "v4l2m2m":
+		// Raspberry Pi など。v4l2m2m は -hwaccel ではなく、デコーダ(入力のコーデック指定)。
+		// フレームはシステムメモリへ出るので、-vf は、ソフトウェアのときと同じ(hwdownload は要らない)。
+		a = append(a, "-c:v", "h264_v4l2m2m")
 	}
 	a = append(a, "-i", BuildURL(c.Input))
 	// 映像を明示して選ぶ。自動の選択は、入力解析で寸法が分からなかったストリーム(キーフレームの前から繋いだ)を
@@ -98,7 +104,11 @@ func BuildArgs(o Options) []string {
 	// デコーダが次のキーフレームを待って映像を出す。MPEG-TS では解析は常に analyzeduration まで続くので、
 	// 解析の上限を大きくしてキーフレームを待たせる方法は、起動のたびに遅れる。
 	a = append(a, "-map", "0:v:0")
-	a = append(a, "-vf", VideoFilter(o.HWAccel, c.Video.Width, c.Video.Height))
+	pf := o.PixFmt
+	if pf == "" {
+		pf = "rgb24"
+	}
+	a = append(a, "-vf", VideoFilter(o.HWAccel, c.Video.Width, c.Video.Height, pf))
 	a = append(a, c.Video.ExtraArgs...) // 出力の直前
 	a = append(a, "-an", "-sn", "-dn")
 	if o.Caps.NeedsVsync0() {

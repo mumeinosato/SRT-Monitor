@@ -15,85 +15,108 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # 成果物の名前に使う版。タグならタグ名、それ以外は dev-<コミット>
+  VER: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('dev-{0}', github.sha) }}
+
 jobs:
-  build:
+  # cgo なし(GTK 不要)の版の検査。速い(依存の取得だけで、数分以内)。
+  test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: write   # リリースの作成に必要(タグのときだけ使う)
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
-      # Go のビルドキャッシュ(gotk4 のcgoコンパイル結果を含む)を go.sum をキーに保存・復元する
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - run: make fetch-mediamtx
+      - name: T1 go vet(cgo なし)
+        run: CGO_ENABLED=0 go vet ./...
+      - name: T1 go test(cgo なし)
+        run: CGO_ENABLED=0 go test ./...
 
+  # cgo なしの版を、3つの CPU 向けにクロスビルドする(実験版)。
+  lite:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goarch: amd64, suffix: amd64 }
+          - { goarch: arm, suffix: armv7 }
+          - { goarch: arm64, suffix: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: ビルド(${{ matrix.goarch }})
+        run: make build-lite GOARCH=${{ matrix.goarch }} GOARM=7
+      - name: パッケージ作成
+        run: scripts/package.sh "srtrx-${VER}-lite-linux-${{ matrix.suffix }}" "bin/lite-${{ matrix.goarch }}" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-lite-${{ matrix.suffix }}
+          path: dist/
+
+  # 本番向けの既定の版(GTK4、cgo)。gotk4 のコンパイルが長いので、キャッシュが効かないと約10分かかる。
+  gtk:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
       # gotk4(cgo)のビルドに GTK4 と gobject-introspection の開発ファイルが要る。
-      # テストは GUI を開かず、ffmpeg も要らない(自己診断のテストは偽の ffmpeg を使う)。
       - name: apt
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends libgtk-4-dev libgirepository1.0-dev pkg-config
-
-      # MediaMTX の公式バイナリを取得して SHA-256 を検証する(以降の make は取得済みとして飛ばす)
       - run: make fetch-mediamtx
-
-      - name: T1 go vet
-        run: go vet ./...
-
-      - name: T1 go test
-        run: go test ./...
-
-      - name: T1 make build
+      - name: go vet(GTK 版)
+        run: go vet -tags gtk ./...
+      - name: ビルド(GTK 版)
         run: make build
-
+      - name: パッケージ作成
+        run: scripts/package.sh "srtrx-${VER}-linux-amd64" bin dist
       - uses: actions/upload-artifact@v4
         with:
-          name: srtrx-linux-amd64
-          path: bin/
+          name: pkg-gtk-amd64
+          path: dist/
 
-      # ---- リリース(v* のタグを push したときだけ) ----
-      - name: パッケージ作成
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          name="srtrx-${GITHUB_REF_NAME}-linux-amd64"
-          mkdir -p "dist/$name"
-          cp bin/srtrx bin/srtrx-player "dist/$name/"
-          cp deploy/srtrx.service deploy/srtrx-player.service "dist/$name/"
-          cp README.md "dist/$name/"
-          cp internal/mediamtx/LICENSE "dist/$name/LICENSE-mediamtx"
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
-
-      - name: GitHub Release を作成
-        if: startsWith(github.ref, 'refs/tags/v')
+  # v* のタグのときだけ、全部のパッケージを集めて、リリースを1回だけ作る。
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, lite, gtk]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          path: dist
+          merge-multiple: true
+      - name: GitHub Release を作成(あれば、ファイルを上書きで添付して、説明文を更新)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          name="srtrx-${GITHUB_REF_NAME}-linux-amd64"
-          cat > notes.md <<'EOF'
-          ## 動作環境
-          - Ubuntu 24.04 LTS (x86_64) でビルド。GTK 4.10 以上(ビルドは 4.14.5)
-          - ffmpeg 6.0 以上(**libsrt 有効**のビルド)。起動時に自己診断します
-          - MediaMTX は `srtrx` に埋め込み済み(公式バイナリ、MIT。`LICENSE-mediamtx` を同梱)
-
-          ## 入れ方
-          ```bash
-          tar xzf srtrx-*-linux-amd64.tar.gz && cd srtrx-*-linux-amd64
-          install -Dm755 srtrx srtrx-player -t ~/.local/bin
-          install -Dm644 srtrx.service srtrx-player.service -t ~/.config/systemd/user
-          systemctl --user daemon-reload
-          systemctl --user enable --now srtrx-player.service srtrx.service
-          ```
-          EOF
-          files=("dist/$name.tar.gz" "dist/$name.tar.gz.sha256")
+          ls -la dist
+          files=(dist/*.tar.gz dist/*.tar.gz.sha256)
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            # 画面などで先にリリースが作られていたら、ファイルを上書きで添付し、説明文も更新する
+            # 画面などで先にリリースが作られていても失敗しない
             gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
-            gh release edit "$GITHUB_REF_NAME" --title "srtrx $GITHUB_REF_NAME" --notes-file notes.md
+            gh release edit "$GITHUB_REF_NAME" --title "srtrx $GITHUB_REF_NAME" --notes-file .github/release-notes.md
           else
             gh release create "$GITHUB_REF_NAME" "${files[@]}" \
-              --title "srtrx $GITHUB_REF_NAME" --notes-file notes.md --generate-notes
+              --title "srtrx $GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
           fi

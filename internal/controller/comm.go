@@ -172,6 +172,7 @@ func (c *Controller) stateLoop(ctx context.Context) {
 			return
 		case <-tk.C:
 			c.pushState()
+			c.maybeAutoReset(c.now())
 		}
 	}
 }

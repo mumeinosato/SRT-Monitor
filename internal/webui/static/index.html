@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>srtrx 制御</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <button id="lockBtn" class="pill-btn" title="ロック中は設定を変更できません。解除は確認で行います。">本番ロック</button>
+  <nav id="tabs" class="seg" aria-label="ページ">
+    <button data-tab="status" class="on">状態</button>
+    <button data-tab="settings">設定</button>
+    <button data-tab="logs">ログ</button>
+  </nav>
+  <button id="infoBtn" class="pill-btn">情報</button>
+</header>
+
+<main>
+  <section id="page-status" class="page"></section>
+  <section id="page-settings" class="page" hidden></section>
+  <section id="page-logs" class="page" hidden></section>
+</main>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

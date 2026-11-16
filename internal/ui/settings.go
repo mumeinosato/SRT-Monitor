@@ -1,3 +1,5 @@
+//go:build gtk
+
 package ui
 
 import (
@@ -66,6 +68,22 @@ func enums(key, label string, live bool, opts []string, p func(*config.Config) *
 
 func mtxDerived(c config.Config) bool { return c.MediaMTX.Enabled }
 
+// deriveByKey は、指定のキーの項目を「同梱MediaMTXから自動で決まる(無効表示)」にする。
+// 並びの番号ではなくキーで探すので、項目を足しても、別の項目を無効にしてしまわない。
+func deriveByKey(fields []*field, f func(config.Config) bool, keys ...string) {
+	for _, k := range keys {
+		found := false
+		for _, fl := range fields {
+			if fl.key == k {
+				fl.derived, found = f, true
+			}
+		}
+		if !found {
+			panic("deriveByKey: 項目が無い: " + k)
+		}
+	}
+}
+
 // tab は設定画面のタブ(接続、映像、監視、表示)。
 type tab struct {
 	name   string
@@ -92,13 +110,13 @@ func buildTabs() []tab {
 		ints("input.analyzeduration_ms", "入力解析の時間の上限(ms)", false, func(c *config.Config) *int { return &c.Input.AnalyzeDurationMS }),
 		bools("input.tlpktdrop", "遅れたパケットの破棄(tlpktdrop)", false, func(c *config.Config) *bool { return &c.Input.TLPktDrop }),
 	}
-	conn[6].derived, conn[7].derived = mtxDerived, mtxDerived // input.host / port
+	deriveByKey(conn, mtxDerived, "input.host", "input.port")
 
 	video := []*field{
 		ints("video.width", "出力解像度 幅", false, func(c *config.Config) *int { return &c.Video.Width }),
 		ints("video.height", "出力解像度 高さ", false, func(c *config.Config) *int { return &c.Video.Height }),
 		ints("video.fps", "表示間隔のFPS(バッファ使用時)", true, func(c *config.Config) *int { return &c.Video.FPS }),
-		enums("video.hwaccel", "ハードウェアデコード", false, []string{"none", "vaapi", "qsv"}, func(c *config.Config) *string { return &c.Video.HWAccel }),
+		enums("video.hwaccel", "ハードウェアデコード", false, []string{"none", "vaapi", "qsv", "v4l2m2m"}, func(c *config.Config) *string { return &c.Video.HWAccel }),
 		ints("video.player_buffer_frames", "プレイヤー側のバッファ(フレーム数, 0=最新優先)", true, func(c *config.Config) *int { return &c.Video.PlayerBufferFrames }),
 		{key: "video.extra_args", label: "ffmpegの追加引数(上級者向け)", kind: kArgs, pArgs: func(c *config.Config) *[]string { return &c.Video.ExtraArgs }},
 	}
@@ -115,8 +133,9 @@ func buildTabs() []tab {
 		strs("metrics.url", "/metrics のURL", true, func(c *config.Config) *string { return &c.Metrics.URL }),
 		ints("metrics.interval_ms", "/metrics の取得間隔(ms)", true, func(c *config.Config) *int { return &c.Metrics.IntervalMS }),
 		ints("metrics.timeout_ms", "/metrics の取得タイムアウト(ms)", true, func(c *config.Config) *int { return &c.Metrics.TimeoutMS }),
+		ints("metrics.reset_interval_ms", "累計の自動リセット間隔(ms、0=しない、既定 5分)", true, func(c *config.Config) *int { return &c.Metrics.ResetIntervalMS }),
 	}
-	sup[8].derived = mtxDerived
+	deriveByKey(sup, mtxDerived, "metrics.url")
 
 	disp := []*field{
 		strs("display.monitor", "表示するモニター(primary またはコネクター名)", true, func(c *config.Config) *string { return &c.Display.Monitor }),

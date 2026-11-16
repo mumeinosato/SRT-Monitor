@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"path/filepath"
+	"srtrx/internal/metrics"
 	"testing"
 	"time"
 
@@ -260,5 +261,110 @@ func TestFFmpegReadyIgnoresFramesOfPreviousFFmpeg(t *testing.T) {
 	c.onHeartbeat(ipc.NewHeartbeat(30, 10, 140))
 	if !c.ffmpegReady() {
 		t.Error("新しい ffmpeg のフレームで準備完了")
+	}
+}
+
+// 累計を持つ Poller を差し込む(Run はしない)。
+func attachPoller(c *Controller) *metrics.Poller {
+	p := metrics.NewPoller("http://127.0.0.1:1/metrics", time.Second, time.Second, nil)
+	c.poll = p
+	return p
+}
+
+func feedLoss(p *metrics.Poller, id string, loss float64) metrics.Stats {
+	return p.Tracker.Update(&metrics.Snapshot{Conns: []metrics.Conn{{ID: id, Loss: loss}}, FrameErrors: map[string]float64{}})
+}
+
+func TestAutoResetFiresOncePerInterval(t *testing.T) {
+	c := newTestController(t)
+	p := attachPoller(c)
+	now := time.Unix(1000, 0)
+	c.now = func() time.Time { return now }
+	// 既定は5分
+	if got := c.Config().Metrics.ResetIntervalMS; got != 300000 {
+		t.Fatalf("既定: %d", got)
+	}
+
+	feedLoss(p, "A", 0) // 基準
+	if c.maybeAutoReset(now) {
+		t.Fatal("最初の呼び出しは数え始めで、リセットしない")
+	}
+	feedLoss(p, "A", 40)
+	if p.Tracker.Last().Loss != 40 {
+		t.Fatal("累計が載る")
+	}
+	now = now.Add(4*time.Minute + 59*time.Second)
+	if c.maybeAutoReset(now) || p.Tracker.Last().Loss != 40 {
+		t.Fatal("5分に満たなければリセットしない")
+	}
+	now = now.Add(time.Second) // ちょうど5分
+	if !c.maybeAutoReset(now) {
+		t.Fatal("5分でリセットする")
+	}
+	if got := p.Tracker.Last().Loss; got != 0 {
+		t.Errorf("累計が0に戻る: %d", got)
+	}
+	// 毎tickではなく、1周期に1回
+	for i := 0; i < 100; i++ {
+		now = now.Add(time.Second)
+		if c.maybeAutoReset(now) {
+			t.Fatalf("1周期のうちに、また発火した(%d秒後)", i+1)
+		}
+	}
+	// 次の周期。リセット後に増えた分だけが載っている
+	feedLoss(p, "A", 55) // 基準は40のまま → +15
+	if got := p.Tracker.Last().Loss; got != 15 {
+		t.Errorf("リセット後の増分だけ: %d", got)
+	}
+	now = now.Add(5 * time.Minute)
+	if !c.maybeAutoReset(now) || p.Tracker.Last().Loss != 0 {
+		t.Error("次の周期でもリセットする")
+	}
+}
+
+func TestManualResetRestartsTheInterval(t *testing.T) {
+	c := newTestController(t)
+	p := attachPoller(c)
+	now := time.Unix(1000, 0)
+	c.now = func() time.Time { return now }
+	c.maybeAutoReset(now) // 数え始め
+	now = now.Add(4 * time.Minute)
+	c.ResetCounters() // 手動(ボタン、Ctrl+R、SIGUSR1 と同じ)
+	feedLoss(p, "A", 0)
+	now = now.Add(2 * time.Minute) // 数え始めからは6分、手動のリセットからは2分
+	if c.maybeAutoReset(now) {
+		t.Error("手動のリセットから1周期たつまで、自動ではリセットしない")
+	}
+	now = now.Add(3 * time.Minute) // 手動のリセットから5分
+	if !c.maybeAutoReset(now) {
+		t.Error("手動のリセットから5分でリセットする")
+	}
+}
+
+func TestAutoResetIsLiveAndZeroDisables(t *testing.T) {
+	c := newTestController(t)
+	attachPoller(c)
+	now := time.Unix(1000, 0)
+	c.now = func() time.Time { return now }
+	c.maybeAutoReset(now)
+
+	// 0 で止まる(即時に効く)
+	if err := c.SetLive(func(g *config.Config) { g.Metrics.ResetIntervalMS = 0 }); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(24 * time.Hour)
+	if c.maybeAutoReset(now) {
+		t.Error("0 のときは自動でリセットしない")
+	}
+	// 間隔を変えると、すぐ次の判定に効く
+	if err := c.SetLive(func(g *config.Config) { g.Metrics.ResetIntervalMS = 10000 }); err != nil {
+		t.Fatal(err)
+	}
+	if !c.maybeAutoReset(now) {
+		t.Error("間隔を縮めたら、経過済みとしてすぐリセットする")
+	}
+	// 範囲外は拒否
+	if err := c.SetLive(func(g *config.Config) { g.Metrics.ResetIntervalMS = 5000 }); err == nil {
+		t.Error("10秒未満は拒否")
 	}
 }

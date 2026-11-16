@@ -14,6 +14,7 @@ import (
 
 	"srtrx/internal/config"
 	"srtrx/internal/ffmpeg"
+	"srtrx/internal/frame"
 	"srtrx/internal/ipc"
 	"srtrx/internal/logx"
 	"srtrx/internal/mediamtx"
@@ -104,6 +105,8 @@ type Controller struct {
 	mtxReadyAt time.Time
 
 	faults []supervisor.Fault
+
+	lastReset time.Time // 累計を最後にリセットした時刻(自動、手動のどちらでも)。ゼロなら、まだ数え始めていない
 
 	ipcMu   sync.Mutex
 	ipcConn *ipc.Conn
@@ -314,7 +317,7 @@ func (c *Controller) startFFmpeg() (supervisor.Runner, error) {
 	if !caps.HasUnix {
 		output = c.paths.FrameFIFO
 	}
-	o := ffmpeg.Options{Config: cfg, Caps: caps, HWAccel: hw, Output: output}
+	o := ffmpeg.Options{Config: cfg, Caps: caps, HWAccel: hw, Output: output, PixFmt: frame.FFmpegPixFmt}
 	slog.Info("ffmpeg を起動する", "args", ffmpeg.BuildArgs(o))
 
 	// フレーム判定の基準を取り直す
@@ -427,6 +430,9 @@ func (c *Controller) diagnose(ctx context.Context) {
 		if !caps.HasUnix {
 			slog.Warn("この ffmpeg には unix プロトコルが無いので、FIFO で受け渡す")
 		}
+		if caps.Untested() {
+			slog.Warn("この版の ffmpeg は、動作確認していない(確認済みは 6.1 以上)。映像が出ないときは、ログの stderr を確かめること", "version", caps.VersionText)
+		}
 	}
 	c.pushState()
 }
@@ -510,6 +516,9 @@ func (c *Controller) StartAll() {
 
 // ResetCounters は累計のリセット(GUIのボタンとホットキー)。
 func (c *Controller) ResetCounters() {
+	c.mu.Lock()
+	c.lastReset = c.now() // 手動のリセットでも、次の自動リセットは、そこから1周期あとにする
+	c.mu.Unlock()
 	if c.poll == nil {
 		return
 	}
@@ -519,6 +528,26 @@ func (c *Controller) ResetCounters() {
 	c.ipcMu.Unlock()
 	c.sendIPC(ipc.NewCountersReset())
 	c.sendStats(c.poll.Tracker.Last())
+}
+
+// maybeAutoReset は、`metrics.reset_interval_ms` が経過していたら累計をリセットする。
+// 間隔は呼ぶたびに設定から読むので、設定の変更は即時に効く(0 で止まる)。リセットしたら true。
+func (c *Controller) maybeAutoReset(now time.Time) bool {
+	c.mu.Lock()
+	interval := time.Duration(c.cfg.Metrics.ResetIntervalMS) * time.Millisecond
+	if c.lastReset.IsZero() {
+		c.lastReset = now // 最初の呼び出しが、数え始め
+		c.mu.Unlock()
+		return false
+	}
+	due := interval > 0 && now.Sub(c.lastReset) >= interval
+	c.mu.Unlock()
+	if !due {
+		return false
+	}
+	slog.Info("累計を自動でリセットする", "interval", interval.String())
+	c.ResetCounters()
+	return true
 }
 
 // Status はGUI用の状態の写し。

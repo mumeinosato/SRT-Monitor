@@ -32,7 +32,7 @@ func NewRuntime(paths config.Paths) (*Runtime, config.Config) {
 	for _, n := range info.Notes {
 		slog.Warn("設定の読み込み", "note", n)
 	}
-	st := frame.NewStore(cfg.Video.Width, cfg.Video.Height, cfg.Video.PlayerBufferFrames, cfg.Video.FPS)
+	st := frame.NewStore(cfg.Video.Width, cfg.Video.Height, frame.BytesPerPixel, cfg.Video.PlayerBufferFrames, cfg.Video.FPS)
 	return &Runtime{Paths: paths, Store: st, Recv: frame.NewReceiver(st), Model: NewModel(cfg)}, cfg
 }
 

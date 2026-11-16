@@ -49,6 +49,7 @@ rtsp: no
 rtmp: no
 hls: no
 webrtc: no
+moq: no
 api: no
 srt: yes
 srtAddress: ":8890"
