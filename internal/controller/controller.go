@@ -14,6 +14,7 @@ import (
 
 	"srtrx/internal/config"
 	"srtrx/internal/ffmpeg"
+	"srtrx/internal/frame"
 	"srtrx/internal/ipc"
 	"srtrx/internal/logx"
 	"srtrx/internal/mediamtx"
@@ -316,7 +317,7 @@ func (c *Controller) startFFmpeg() (supervisor.Runner, error) {
 	if !caps.HasUnix {
 		output = c.paths.FrameFIFO
 	}
-	o := ffmpeg.Options{Config: cfg, Caps: caps, HWAccel: hw, Output: output}
+	o := ffmpeg.Options{Config: cfg, Caps: caps, HWAccel: hw, Output: output, PixFmt: frame.FFmpegPixFmt}
 	slog.Info("ffmpeg を起動する", "args", ffmpeg.BuildArgs(o))
 
 	// フレーム判定の基準を取り直す

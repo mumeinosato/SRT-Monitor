@@ -265,3 +265,18 @@ func TestProbeOptionsAreConfigurableAndInMicroseconds(t *testing.T) {
 		t.Errorf("既定の解析の上限が小さい: %+v", d)
 	}
 }
+
+func TestPixelFormatFollowsPlayer(t *testing.T) {
+	o := opts(nil)
+	o.PixFmt = "bgr0" // 既定(cgo なし)のプレイヤーは bgr0 で受ける
+	if s := strings.Join(BuildArgs(o), " "); !strings.Contains(s, "-vf scale=1920:1080,format=bgr0 ") {
+		t.Error(s)
+	}
+	o.HWAccel = "vaapi"
+	if s := strings.Join(BuildArgs(o), " "); !strings.Contains(s, "hwdownload,format=nv12,scale=1920:1080,format=bgr0") {
+		t.Error(s)
+	}
+	if s := strings.Join(BuildArgs(opts(nil)), " "); !strings.Contains(s, "format=rgb24") {
+		t.Error("指定が無ければ rgb24")
+	}
+}

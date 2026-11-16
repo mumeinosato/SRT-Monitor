@@ -1,4 +1,5 @@
-// Package frame は生フレーム(rgb24)の受信と、最新の1枚の保持を担う。
+// Package frame は生フレームの受信と、最新の1枚の保持を担う。
+// 画素形式はビルドの種類で決まる(pixfmt_*.go)。幅×高さ×BytesPerPixel で、1フレームを切る。
 package frame
 
 import (
@@ -15,6 +16,7 @@ type Store struct {
 	mu sync.Mutex
 
 	w, h    int
+	bpp     int // 1画素のバイト数(rgb24 なら3、bgr0 なら4)
 	bufN    int
 	period  time.Duration
 	latest  []byte // 表示中(Take が返す)フレーム。まだ無ければ nil
@@ -30,9 +32,9 @@ type Store struct {
 	free [][]byte
 }
 
-// NewStore は幅・高さ・バッファ枚数・fps で作る。
-func NewStore(w, h, bufFrames, fps int) *Store {
-	s := &Store{}
+// NewStore は幅・高さ・1画素のバイト数・バッファ枚数・fps で作る。
+func NewStore(w, h, bpp, bufFrames, fps int) *Store {
+	s := &Store{bpp: bpp}
 	s.Reset(w, h, bufFrames, fps)
 	return s
 }
@@ -65,11 +67,11 @@ func (s *Store) Reset(w, h, bufFrames, fps int) {
 	}
 }
 
-// FrameSize は1フレームのバイト数(幅×高さ×3)。
+// FrameSize は1フレームのバイト数(幅×高さ×1画素のバイト数)。
 func (s *Store) FrameSize() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.w * s.h * 3
+	return s.w * s.h * s.bpp
 }
 
 // Size は現在の幅と高さ。
@@ -98,7 +100,7 @@ func (s *Store) Buffer(size int) []byte {
 func (s *Store) Publish(buf []byte, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(buf) != s.w*s.h*3 {
+	if len(buf) != s.w*s.h*s.bpp {
 		return
 	}
 	s.total++

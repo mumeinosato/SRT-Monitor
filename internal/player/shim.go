@@ -1,3 +1,5 @@
+//go:build gtk
+
 package player
 
 /*

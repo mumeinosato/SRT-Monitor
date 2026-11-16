@@ -1,3 +1,5 @@
+//go:build gtk
+
 // Package ui は制御側のGTK4画面(状態、設定、ログ)。controller を呼ぶだけの薄い層。
 package ui
 
