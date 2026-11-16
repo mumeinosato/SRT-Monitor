@@ -3,9 +3,6 @@ package player
 import (
 	"errors"
 	"fmt"
-	"image"
-	_ "image/jpeg" // 無信号画像は PNG が基本だが、JPEG も読めるようにしておく
-	"image/png"
 	"log/slog"
 	"os"
 	"strings"
@@ -60,23 +57,17 @@ type x11 struct {
 	vw, vh int // 映像の大きさ(共有メモリの面の大きさ)
 	win0   rect
 
-	lastSeq   uint64
-	lastSig   string
-	lastNS    bool
+	cmp       *composer
 	lastShown int // 最後に表示した面(Expose で再送する)
 	haveShown bool
 
-	showOverlay bool
-	hotkey      rune
-	keysyms     []xproto.Keysym
-	perKey      int
-	minKey      int
+	hotkey  rune
+	keysyms []xproto.Keysym
+	perKey  int
+	minKey  int
 
 	display config.Display
 	applied bool
-
-	nsPath string
-	nsImg  image.Image
 
 	events chan any
 }
@@ -105,7 +96,7 @@ func RunX11(rt *Runtime) int {
 		return 1
 	}
 	setup := xproto.Setup(conn)
-	x := &x11{rt: rt, conn: conn, scr: setup.DefaultScreen(conn), rend: rend, showOverlay: true,
+	x := &x11{rt: rt, conn: conn, scr: setup.DefaultScreen(conn), rend: rend, cmp: newComposer(rt, rend),
 		events: make(chan any, 64), minKey: int(setup.MinKeycode)}
 	if err := x.checkFormat(setup); err != nil {
 		slog.Error("この X サーバの画素形式には対応していない", "err", err)
@@ -291,7 +282,7 @@ func (x *x11) applyDisplay(d config.Display) {
 		_ = xproto.SetInputFocusChecked(x.conn, xproto.InputFocusParent, x.win, xproto.TimeCurrentTime).Check()
 	}
 	x.haveShown = false
-	x.lastSig = "" // 再描画させる
+	x.cmp.invalidate() // 再描画させる
 }
 
 // hideCursor は、窓の上のマウスカーソルを透明にする(展示では見せない)。
@@ -363,7 +354,8 @@ func (x *x11) ensureBufs(w, h int) error {
 	}
 	x.vw, x.vh, x.cur = w, h, 0
 	x.haveShown = false
-	x.lastSeq, x.lastSig = 0, ""
+	x.cmp.lastSeq = 0
+	x.cmp.invalidate()
 	return nil
 }
 
@@ -373,8 +365,8 @@ func (x *x11) draw(force bool) error {
 	now := time.Now()
 	snap := x.rt.Model.Snapshot(now)
 	x.applyDisplay(snap.Cfg.Display)
-	if x.hotkeyRune() != firstRuneOf(snap.Cfg.Overlay.Hotkey) {
-		x.hotkey = firstRuneOf(snap.Cfg.Overlay.Hotkey)
+	if want := firstRuneOf(snap.Cfg.Overlay.Hotkey); x.hotkey != want {
+		x.hotkey = want
 	}
 
 	w, h := x.rt.Store.Size()
@@ -384,54 +376,11 @@ func (x *x11) draw(force bool) error {
 	if err := x.ensureBufs(w, h); err != nil {
 		return err
 	}
-	age := x.rt.FrameAge(now)
-	ov := Overlay{Snap: snap, FrameAge: age, Visible: x.showOverlay}
-	ns := snap.ShowNoSignal()
-	sig := ov.Signature()
-
 	buf := x.bufs[x.cur].mem[:w*h*4]
-	seq, changed := x.rt.Store.Take(buf, x.lastSeq, now)
-	if !changed && sig == x.lastSig && ns == x.lastNS && !force && x.haveShown {
+	if !x.cmp.render(buf, w, h, force, x.haveShown) {
 		return nil
 	}
-	if !changed {
-		// 同じフレームのまま、タイルだけ変わった(または再送): きれいなフレームを取り直す
-		if _, ok := x.rt.Store.Take(buf, 0, now); !ok {
-			FillBlack(buf)
-		}
-	}
-	x.lastSeq, x.lastSig, x.lastNS = seq, sig, ns
-
-	if ns {
-		x.fillNoSignal(buf, w, h, snap.Cfg.Display)
-	}
-	x.rend.Compose(buf, w, h, ov)
 	return x.put(w, h)
-}
-
-func (x *x11) fillNoSignal(buf []byte, w, h int, d config.Display) {
-	if d.NoSignal == "image" && d.NoSignalImage != "" {
-		if x.nsPath != d.NoSignalImage {
-			x.nsPath, x.nsImg = d.NoSignalImage, nil
-			if f, err := os.Open(d.NoSignalImage); err == nil {
-				if img, _, err := image.Decode(f); err == nil {
-					x.nsImg = img
-				} else if img, err := png.Decode(f); err == nil {
-					x.nsImg = img
-				} else {
-					slog.Error("無信号画像を読めない", "path", d.NoSignalImage, "err", err)
-				}
-				f.Close()
-			} else {
-				slog.Error("無信号画像を開けない", "path", d.NoSignalImage, "err", err)
-			}
-		}
-		if x.nsImg != nil {
-			CopyImageFit(buf, w, h, x.nsImg)
-			return
-		}
-	}
-	FillBlack(buf)
 }
 
 // put は、いまの面を窓へ送る。映像が窓より小さければ、中央に置く(残りは黒)。
@@ -491,8 +440,6 @@ func (x *x11) eventLoop() {
 	}
 }
 
-func (x *x11) hotkeyRune() rune { return x.hotkey }
-
 func firstRuneOf(s string) rune {
 	for _, r := range s {
 		return unicode.ToLower(r)
@@ -536,8 +483,8 @@ func (x *x11) loop() int {
 				force = true
 			case evKey:
 				if x.keyMatches(e.code) {
-					x.showOverlay = !x.showOverlay
-					x.lastSig = ""
+					x.cmp.showOverlay = !x.cmp.showOverlay
+					x.cmp.invalidate()
 				}
 			}
 		case <-tk.C:
