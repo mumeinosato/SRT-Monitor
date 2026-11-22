@@ -1,0 +1,22 @@
+#!/bin/bash
+# srtrx を前面で起動する。Ctrl+C で、プレイヤー・制御・MediaMTX・ffmpeg をまとめて終了する。
+BIN="$HOME/.local/bin"
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"; export XDG_RUNTIME_DIR
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null
+unset DISPLAY WAYLAND_DISPLAY   # デスクトップ無し: フレームバッファ(/dev/fb0)へ直接描く
+
+# 実行中だけ、コンソールのカーソルを隠す(映像の上でちらつかせない)。l=隠す、h=出す。権限が無ければ何もしない。
+cursor() { printf '\033[?25%s' "$1" > /dev/tty1 2>/dev/null; }
+cursor l
+
+"$BIN/srtrx-player" & PLAYER=$!
+cleanup() {
+  trap - INT TERM EXIT
+  kill -TERM "$CTRL" 2>/dev/null; wait "$CTRL" 2>/dev/null
+  kill -TERM "$PLAYER" 2>/dev/null; wait "$PLAYER" 2>/dev/null
+  cursor h
+  echo "srtrx を終了した"
+}
+trap cleanup INT TERM EXIT
+"$BIN/srtrx" -web 0.0.0.0:8088 -web-token nc "$@" & CTRL=$!
+wait "$CTRL"

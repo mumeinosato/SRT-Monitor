@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -455,6 +456,10 @@ func (h *HWFallback) Record(f Fault, configured bool, failWithin time.Duration, 
 	if !configured || h.active {
 		return
 	}
+	if srtConnectFailure(f.Stderr) {
+		// 送信が無い(MediaMTX が読み取りを拒否する)間の起動失敗は、デコーダのせいではない。数えない。
+		return
+	}
 	if (f.Kind == FaultExit || f.Kind == FaultStartError) && f.Uptime <= failWithin {
 		h.consecutive++
 		if h.consecutive >= count {
@@ -464,6 +469,16 @@ func (h *HWFallback) Record(f Fault, configured bool, failWithin time.Duration, 
 		return
 	}
 	h.consecutive = 0
+}
+
+// srtConnectFailure は、ffmpeg の stderr が SRT の接続失敗(拒否、タイムアウト)を示すとき真。
+func srtConnectFailure(lines []string) bool {
+	for _, l := range lines {
+		if strings.Contains(l, "Peer rejected connection") || strings.Contains(l, "Connection to srt://") {
+			return true
+		}
+	}
+	return false
 }
 
 // Active はソフトウェアデコードへ落としている間 true。

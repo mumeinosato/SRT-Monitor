@@ -538,3 +538,23 @@ func TestHWFallback(t *testing.T) {
 		t.Error("ウォッチドッグは対象外")
 	}
 }
+
+// 送信が無い間の SRT 接続拒否は、ハードウェアデコードの失敗として数えない。
+func TestHWFallbackIgnoresSRTConnectFailure(t *testing.T) {
+	var h HWFallback
+	rej := Fault{Kind: FaultExit, Uptime: time.Second,
+		Stderr: []string{"[srt @ 0x1] Connection to srt://127.0.0.1:8890 failed: Input/output error"}}
+	for i := 0; i < 5; i++ {
+		h.Record(rej, true, 2*time.Second, 3)
+	}
+	if h.Active() {
+		t.Fatal("接続拒否で、ソフトウェアデコードへ落ちた")
+	}
+	crash := Fault{Kind: FaultExit, Uptime: time.Second, Stderr: []string{"decoder crashed"}}
+	for i := 0; i < 3; i++ {
+		h.Record(crash, true, 2*time.Second, 3)
+	}
+	if !h.Active() {
+		t.Fatal("デコーダの起動失敗で、落ちなかった")
+	}
+}
